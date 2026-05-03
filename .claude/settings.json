@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/Administrator/Downloads/**)",
+      "Bash(timeout 3 python -c \"from ui.main_window import MainWindow; from ui.import_page import ImportPage; from ui.gif_editor_page import GifEditorPage; from ui.template_page import TemplatePage; from ui.voice_page import VoicePage; from ui.api_key_page import ApiKeyPage; from ui.batch_page import BatchPage; from ui.log_page import LogPage; from ui.settings_page import SettingsPage; from core.file_manager import init_app_dirs; from utils.logger import setup_logging; from utils.path_utils import safe_filename, resolve_path; print\\('All imports OK'\\); setup_logging\\(\\); init_app_dirs\\(\\); print\\('Init OK'\\)\")",
+      "Read(//c/c/Users/Administrator/VS Code Projects/region_batch_video_tool/**)",
+      "Bash(timeout 3 python -c \"from core.region_reader import RegionReader; from core.ffmpeg_service import FFmpegService; from models.region_model import RegionModel; from models.video_info_model import VideoInfoModel; r = RegionReader\\(\\); print\\('RegionReader OK'\\); f = FFmpegService\\(\\); print\\(f'FFmpeg available: {f.is_available}'\\); print\\('Stage 2 imports OK'\\)\")",
+      "Bash(timeout 3 python -c \"from core.gif_frame_decoder import GifFrameDecoder; from ui.gif_canvas_view import GifCanvasView; from ui.draggable_text_item import DraggableTextItem; from ui.gif_editor_page import GifEditorPage; from models.text_layer_model import TextLayerModel; from core.text_render_service import TextRenderService; d = GifFrameDecoder\\(\\); print\\('GifFrameDecoder OK'\\); s = TextRenderService\\(\\); print\\('TextRenderService OK'\\); print\\('Stage 3 imports OK'\\)\")",
+      "Bash(python gen_templates.py)",
+      "Bash(rm gen_templates.py)",
+      "Bash(timeout 3 python -c \"from core.template_manager import TemplateManager; from models.template_model import TemplateModel; from ui.template_page import TemplatePage; tm = TemplateManager\\(\\); cats = tm.get_categories\\(\\); templates = tm.get_all_templates\\(\\); print\\(f'Categories: {cats}'\\); print\\(f'Templates: {len\\(templates\\)}'\\); print\\('Stage 4 OK'\\)\")",
+      "Bash(timeout 3 python -c \"from core.gif_render_service import GifRenderService; from core.cache_manager import CacheManager; from utils.image_utils import overlay_text_on_frame; print\\('Stage 5 OK'\\)\")",
+      "Bash(timeout 5 python -c \"from ui.main_window import MainWindow; from ui.import_page import ImportPage; from ui.gif_editor_page import GifEditorPage; print\\('MainWindow with wiring OK'\\)\")",
+      "Bash(python -m unittest discover tests/ -v)",
+      "Bash(timeout 5 python -c ' *)"
+    ],
+    "additionalDirectories": [
+      "c:\\c\\Users\\Administrator\\VS Code Projects\\region_batch_video_tool\\config"
+    ]
+  }
+}

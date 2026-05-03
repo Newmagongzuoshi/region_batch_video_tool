@@ -1,0 +1,16 @@
+{
+  "provider_name": "自定义TTS",
+  "method": "POST",
+  "endpoint": "https://api.example.com/tts",
+  "headers": {
+    "Authorization": "Bearer {{api_key}}",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "text": "{{text}}",
+    "voice": "{{voice_id}}",
+    "speed": "{{speed}}",
+    "pitch": "{{pitch}}"
+  },
+  "response_type": "binary"
+}
