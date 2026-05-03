@@ -28,7 +28,8 @@ class GifRenderService:
         safe_filename: str,
         text_layer: TextLayerModel,
         output_gif_path: str,
-        output_png_sequence_dir: str,
+        output_png_sequence_dir: str = "",
+        skip_png: bool = True,
     ) -> bool:
         if self._decoder is None:
             logger.error("GifFrameDecoder not set")
@@ -56,7 +57,8 @@ class GifRenderService:
             durations = self._decoder.get_durations()
 
             frames = []
-            os.makedirs(output_png_sequence_dir, exist_ok=True)
+            if not skip_png and output_png_sequence_dir:
+                os.makedirs(output_png_sequence_dir, exist_ok=True)
 
             for i in range(total_frames):
                 frame = self._decoder.get_frame(i)
@@ -64,13 +66,12 @@ class GifRenderService:
                     logger.error(f"Failed to get frame {i} for: {region_name}")
                     return False
 
-                # Composite text onto frame
                 result = frame.copy()
                 result.paste(text_img, text_pos, text_img)
 
-                # Save PNG sequence frame
-                png_path = os.path.join(output_png_sequence_dir, f"frame_{i+1:05d}.png")
-                result.save(png_path, "PNG")
+                if not skip_png and output_png_sequence_dir:
+                    png_path = os.path.join(output_png_sequence_dir, f"frame_{i+1:05d}.png")
+                    result.save(png_path, "PNG")
 
                 frames.append(result)
 

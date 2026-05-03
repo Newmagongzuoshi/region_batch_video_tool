@@ -81,6 +81,62 @@ class VideoComposer:
             shutil.copy2(region_mp3_path, output_mp3_path)
             return output_mp3_path
 
+    def adjust_region_mp3_volume_cached(
+        self,
+        source_loudness: dict,
+        region_mp3_path: str,
+        output_mp3_path: str,
+        target_offset_db: float = 3.0,
+        max_gain_db: float = 8.0,
+    ) -> str:
+        """Adjust MP3 volume using pre-cached source loudness (avoids re-analyzing video)."""
+        try:
+            mp3_loudness = self.analyze_loudness(region_mp3_path, duration=0)
+            src_mean = source_loudness.get("mean_volume_db", -20.0)
+            mp3_mean = mp3_loudness.get("mean_volume_db", -20.0)
+            gain_db = src_mean + target_offset_db - mp3_mean
+            gain_db = max(-max_gain_db, min(max_gain_db, round(gain_db, 1)))
+
+            os.makedirs(os.path.dirname(output_mp3_path), exist_ok=True)
+
+            if abs(gain_db) < 0.5:
+                import shutil
+                shutil.copy2(region_mp3_path, output_mp3_path)
+                return output_mp3_path
+
+            ok = adjust_mp3_volume(region_mp3_path, output_mp3_path, gain_db,
+                                   ffmpeg_path=self._ffmpeg.ffmpeg_path or "ffmpeg")
+            if not ok:
+                import shutil
+                shutil.copy2(region_mp3_path, output_mp3_path)
+            return output_mp3_path
+        except Exception as e:
+            logger.error(f"adjust_region_mp3_volume_cached failed: {e}")
+            import shutil
+            shutil.copy2(region_mp3_path, output_mp3_path)
+            return output_mp3_path
+
+    def compose_final_video_cached(
+        self,
+        source_video_path: str,
+        region_gif_path: str,
+        region_mp3_path: str,
+        output_video_path: str,
+        video_info: VideoInfoModel,
+        gif_durations: list[int] | None = None,
+        overlay_x: int = 0,
+        overlay_y: int = 0,
+        overlay_scale: float = 1.0,
+    ) -> bool:
+        """Faster compose using pre-cached video info and direct GIF input (no PNG round-trip)."""
+        return self._compose_impl(
+            source_video_path, region_gif_path, region_mp3_path, output_video_path,
+            video_info=video_info,
+            use_png=False, png_sequence_dir=None,
+            gif_durations=gif_durations,
+            overlay_x=overlay_x, overlay_y=overlay_y, overlay_scale=overlay_scale,
+        )
+
     def compose_final_video(
         self,
         source_video_path: str,
@@ -93,12 +149,36 @@ class VideoComposer:
         overlay_y: int = 0,
         overlay_scale: float = 1.0,
     ) -> bool:
+        """Original compose method with PNG sequence support (fallback)."""
+        return self._compose_impl(
+            source_video_path, region_gif_path, region_mp3_path, output_video_path,
+            video_info=None,
+            use_png=None, png_sequence_dir=png_sequence_dir,
+            gif_durations=gif_durations,
+            overlay_x=overlay_x, overlay_y=overlay_y, overlay_scale=overlay_scale,
+        )
+
+    def _compose_impl(
+        self,
+        source_video_path: str,
+        region_gif_path: str,
+        region_mp3_path: str,
+        output_video_path: str,
+        video_info: VideoInfoModel | None = None,
+        use_png: bool | None = None,
+        png_sequence_dir: str | None = None,
+        gif_durations: list[int] | None = None,
+        overlay_x: int = 0,
+        overlay_y: int = 0,
+        overlay_scale: float = 1.0,
+    ) -> bool:
         if not self._ffmpeg.is_available:
             logger.error("FFmpeg not available")
             return False
 
         try:
-            video_info = self.analyze_source_video(source_video_path)
+            if video_info is None:
+                video_info = self.analyze_source_video(source_video_path)
             if video_info.duration <= 0:
                 logger.error("Cannot determine source video duration")
                 return False
@@ -109,22 +189,26 @@ class VideoComposer:
 
             os.makedirs(os.path.dirname(output_video_path), exist_ok=True)
 
-            # Calculate correct framerate for PNG sequence from GIF durations
-            use_png = False
-            if png_sequence_dir and os.path.isdir(png_sequence_dir):
-                png_pattern = os.path.join(png_sequence_dir, "frame_%05d.png")
-                if os.path.isfile(os.path.join(png_sequence_dir, "frame_00001.png")):
-                    use_png = True
-                    if gif_durations:
-                        total_ms = sum(gif_durations)
-                        frame_count = len(gif_durations)
-                        png_fps = frame_count / (total_ms / 1000.0) if total_ms > 0 else 10
-                    else:
-                        png_fps = 10
-                    overlay_input = ["-framerate", str(round(png_fps, 2)), "-i", png_pattern]
+            # Decide whether to use PNG sequence or direct GIF
+            if use_png is None:
+                # Auto-detect: use PNG only if available
+                use_png = False
+                if png_sequence_dir and os.path.isdir(png_sequence_dir):
+                    first_frame = os.path.join(png_sequence_dir, "frame_00001.png")
+                    use_png = os.path.isfile(first_frame)
 
-            if not use_png:
+            if use_png and png_sequence_dir:
+                png_pattern = os.path.join(png_sequence_dir, "frame_%05d.png")
+                if gif_durations:
+                    total_ms = sum(gif_durations)
+                    png_fps = len(gif_durations) / (total_ms / 1000.0) if total_ms > 0 else 10
+                else:
+                    png_fps = 10
+                overlay_input = ["-framerate", str(round(png_fps, 2)), "-i", png_pattern]
+                logger.info(f"Using PNG sequence: {png_pattern} @ {png_fps:.1f}fps")
+            else:
                 overlay_input = ["-ignore_loop", "1", "-i", region_gif_path]
+                logger.info(f"Using GIF directly: {region_gif_path}")
 
             cmd = [ffmpeg_exe, "-y", "-i", source_video_path]
             cmd.extend(overlay_input)
@@ -160,6 +244,7 @@ class VideoComposer:
             cmd.extend([
                 "-t", duration_str,
                 "-c:v", "libx264",
+                "-preset", "ultrafast",
                 "-pix_fmt", "yuv420p",
                 "-c:a", "aac",
                 "-movflags", "+faststart",

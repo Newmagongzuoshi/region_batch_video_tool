@@ -1,10 +1,11 @@
 import os
+import time
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QGroupBox, QProgressBar, QMessageBox,
+    QGroupBox, QProgressBar, QMessageBox, QTextEdit,
 )
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal, QTimer
 
 from core.batch_task_manager import BatchTaskManager
 from utils.logger import get_logger
@@ -14,6 +15,7 @@ logger = get_logger()
 
 class BatchWorker(QThread):
     progress = Signal(str, dict)
+    mp4_log = Signal(str, str)  # region, status
     finished = Signal()
 
     def __init__(self, manager: BatchTaskManager, regions: list[dict]):
@@ -23,7 +25,11 @@ class BatchWorker(QThread):
 
     def run(self):
         try:
-            self._manager.run_full_pipeline(self._regions, on_progress=self._on_progress)
+            self._manager.run_full_pipeline(
+                self._regions,
+                on_progress=self._on_progress,
+                on_mp4_done=self._on_mp4_done,
+            )
         except Exception as e:
             logger.error(f"Pipeline error: {e}")
         finally:
@@ -31,6 +37,9 @@ class BatchWorker(QThread):
 
     def _on_progress(self, step: str, p: dict):
         self.progress.emit(step, p)
+
+    def _on_mp4_done(self, region: str, status: str):
+        self.mp4_log.emit(region, status)
 
 
 class BatchPage(QWidget):
@@ -42,14 +51,27 @@ class BatchPage(QWidget):
         self._worker: BatchWorker | None = None
         self._running = False
         self._output_dir: str = ""
+        self._start_time: float = 0
+        self._elapsed_timer: QTimer | None = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(16)
+        layout.setSpacing(12)
 
+        # Title + timer row
+        header_row = QHBoxLayout()
         title = QLabel("批量生成")
         title.setStyleSheet("font-size: 24px; font-weight: bold;")
-        layout.addWidget(title)
+        header_row.addWidget(title)
+        header_row.addStretch()
+        self._timer_label = QLabel("00:00")
+        self._timer_label.setStyleSheet(
+            "font-size: 22px; font-weight: bold; color: #e67e22; "
+            "background: #2c3e50; padding: 4px 12px; border-radius: 4px;"
+        )
+        self._timer_label.setVisible(False)
+        header_row.addWidget(self._timer_label)
+        layout.addLayout(header_row)
 
         desc = QLabel("一键生成所有地区的 GIF、MP3 和 MP4。结果保存到 output/ 目录。")
         desc.setWordWrap(True)
@@ -85,6 +107,19 @@ class BatchPage(QWidget):
 
         layout.addWidget(prog_group)
 
+        # MP4 output log
+        log_group = QGroupBox("MP4 生成记录")
+        log_layout = QVBoxLayout(log_group)
+        self._log_text = QTextEdit()
+        self._log_text.setReadOnly(True)
+        self._log_text.setMaximumHeight(160)
+        self._log_text.setStyleSheet(
+            "font-family: Consolas, '微软雅黑'; font-size: 12px; "
+            "background-color: #1a1a2e; color: #e0e0e0;"
+        )
+        log_layout.addWidget(self._log_text)
+        layout.addWidget(log_group)
+
         # Buttons
         btn_row = QHBoxLayout()
 
@@ -112,19 +147,16 @@ class BatchPage(QWidget):
         btn_row.addWidget(open_btn)
 
         layout.addLayout(btn_row)
-        layout.addStretch()
 
     def set_manager(self, manager: BatchTaskManager):
         self._manager = manager
 
     def start_with_regions(self, regions: list[dict]):
-        """Called by MainWindow to start generation immediately."""
         if self._manager is None:
             return
         self._start(regions)
 
     def _on_start(self):
-        """Button click: request MainWindow to prepare and start."""
         self.generate_requested.emit()
 
     def _start(self, regions: list[dict]):
@@ -134,11 +166,25 @@ class BatchPage(QWidget):
         self._start_btn.setEnabled(False)
         self._stop_btn.setEnabled(True)
         self._status_label.setText("正在生成...")
+        self._log_text.clear()
+
+        # Start timer
+        self._start_time = time.time()
+        self._timer_label.setVisible(True)
+        self._timer_label.setText("00:00")
+        self._elapsed_timer = QTimer()
+        self._elapsed_timer.timeout.connect(self._tick_timer)
+        self._elapsed_timer.start(200)
 
         self._worker = BatchWorker(self._manager, regions)
         self._worker.progress.connect(self._on_progress)
+        self._worker.mp4_log.connect(self._on_mp4_log)
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
+
+    def _tick_timer(self):
+        elapsed = int(time.time() - self._start_time)
+        self._timer_label.setText(f"{elapsed // 60:02d}:{elapsed % 60:02d}")
 
     def _on_stop(self):
         if self._manager:
@@ -146,6 +192,8 @@ class BatchPage(QWidget):
         self._start_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
         self._status_label.setText("已停止")
+        if self._elapsed_timer:
+            self._elapsed_timer.stop()
 
     def _on_progress(self, step: str, p: dict):
         cur = p.get("current", 0)
@@ -160,18 +208,32 @@ class BatchPage(QWidget):
             self._mp4_bar.setMaximum(max(1, total))
             self._mp4_bar.setValue(cur)
 
+    def _on_mp4_log(self, region: str, status: str):
+        color = "#27ae60" if status == "ok" else "#e74c3c"
+        icon = "OK" if status == "ok" else "FAIL"
+        self._log_text.append(
+            f'<span style="color:{color}">[{icon}] {region}.mp4</span>'
+        )
+
     def _on_finished(self):
         self._running = False
         self._start_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
-        self._status_label.setText("生成完成！请查看 output/报告/ 目录")
+        if self._elapsed_timer:
+            self._elapsed_timer.stop()
+        self._tick_timer()
+        elapsed = int(time.time() - self._start_time)
+        self._status_label.setText(
+            f"生成完成！耗时 {elapsed // 60}分{elapsed % 60}秒 | 报告: output/报告/"
+        )
         QMessageBox.information(
             self, "完成",
-            "批量生成完成！\n\n"
-            "输出文件:\n"
-            "  output/材料库/  — GIF 和 MP3\n"
-            "  output/生成的视频/  — 最终 MP4\n"
-            "  output/报告/  — 成功/失败清单"
+            f"批量生成完成！\n\n"
+            f"耗时: {elapsed // 60}分{elapsed % 60}秒\n\n"
+            f"输出文件:\n"
+            f"  output/材料库/  — GIF 和 MP3\n"
+            f"  output/生成的视频/  — 最终 MP4\n"
+            f"  output/报告/  — 成功/失败清单"
         )
 
     def set_output_dir(self, path: str):

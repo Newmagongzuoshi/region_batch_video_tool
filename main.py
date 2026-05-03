@@ -19,6 +19,23 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("RegionBatchVideoTool")
 
+    # Global checkbox style — enlarge indicator without breaking native checkmark
+    app.setStyleSheet("""
+        QCheckBox {
+            font-size: 13px;
+            spacing: 10px;
+            padding: 4px 0;
+        }
+        QCheckBox::indicator {
+            width: 22px;
+            height: 22px;
+        }
+        QCheckBox:checked {
+            color: #1e8449;
+            font-weight: bold;
+        }
+    """)
+
     window = MainWindow()
     window.show()
 
