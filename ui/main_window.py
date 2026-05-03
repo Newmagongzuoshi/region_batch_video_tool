@@ -120,8 +120,17 @@ class MainWindow(QMainWindow):
         import_page.import_done.connect(self._on_import_done)
         gif_page.text_layer_changed.connect(self._on_text_layer_changed)
 
+        # API key changes → refresh voice engines
+        api_page = self._pages["API Key 管理"]
+        api_page.keys_changed.connect(self.sync_voice_engines)
+
         # Batch page: one-click generate
         batch_page.generate_requested.connect(self._on_generate)
+
+    def sync_voice_engines(self):
+        """Called when API keys change to refresh voice engine list."""
+        voice_page = self._pages["语音设置"]
+        voice_page.refresh_api_engines()
 
     def _on_import_done(self, result: dict):
         paths = result.get("paths", {})
@@ -150,9 +159,6 @@ class MainWindow(QMainWindow):
         if self._video_path:
             gif_page.set_video_path(self._video_path)
 
-        if self._ffmpeg.ffmpeg_path:
-            self._sapi_engine = WindowsSapiTTSEngine(ffmpeg_path=self._ffmpeg.ffmpeg_path)
-
         self._switch_to("GIF 编辑")
 
     def _on_text_layer_changed(self, text_layer: TextLayerModel):
@@ -166,33 +172,30 @@ class MainWindow(QMainWindow):
 
         # Prepare paths
         base = os.path.abspath(self._output_dir)
-        gif_dir = os.path.join(base, "材料库")
         video_dir = os.path.join(base, "生成的视频")
-        report_dir = os.path.join(base, "报告")
 
-        # Init batch manager
         gif_decoder = GifFrameDecoder()
         gif_decoder.load(self._gif_path)
 
         gif_page = self._pages["GIF 编辑"]
         overlay = gif_page.get_gif_overlay_info()
-        logger.info(f"[OVERLAY] from editor: x={overlay['x']} y={overlay['y']} scale={overlay['scale_x']}")
 
         self._batch_manager = BatchTaskManager()
+        voice_page = self._pages["语音设置"]
+        tts_engine = voice_page.get_engine()
+
         self._batch_manager.initialize(
             gif_decoder=gif_decoder,
             text_layer=self._text_layer,
             source_video_path=self._video_path,
-            output_gif_dir=gif_dir,
             output_video_dir=video_dir,
-            report_dir=report_dir,
+            report_dir=video_dir,
             existing_file_policy="skip",
-            sapi_engine=self._sapi_engine,
+            sapi_engine=tts_engine,
             overlay_x=overlay.get("x", 0),
             overlay_y=overlay.get("y", 0),
             overlay_scale=overlay.get("scale_x", 1.0),
         )
-        logger.info(f"[OVERLAY] passed to batch: x={self._batch_manager._overlay_x} y={self._batch_manager._overlay_y} scale={self._batch_manager._overlay_scale}")
 
         # Give manager and output dir to batch page, then start
         batch_page = self._pages["批量生成"]

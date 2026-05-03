@@ -14,16 +14,13 @@ from utils.logger import get_logger
 
 logger = get_logger()
 
-GIF_WORKERS = 4
-MP3_WORKERS = 3
-MP4_WORKERS = 2
+PIPELINE_WORKERS = 6
 MAX_RETRIES = 2
 
 
 class BatchTaskManager:
-    """Simple batch processor. Generates GIF→MP3→MP4 for each region.
-
-    No SQLite, no complex task tracking. Results written to a report file.
+    """Pipeline-parallel batch processor. GIF+MP3 are intermediate temp files.
+    Only MP4 is output to the user's directory.
     """
 
     def __init__(self):
@@ -35,17 +32,10 @@ class BatchTaskManager:
 
         self._stopped = False
 
-        # Results tracking (in-memory)
+        # Results tracking (MP4 only)
         self._results: list[dict] = []
-        self._gif_total = 0
-        self._gif_done = 0
-        self._mp3_total = 0
-        self._mp3_done = 0
-        self._mp4_total = 0
-        self._mp4_done = 0
 
         self._gif_text_layer: TextLayerModel | None = None
-        self._output_gif_dir: str = ""
         self._output_video_dir: str = ""
         self._report_dir: str = ""
         self._source_video_path: str = ""
@@ -55,16 +45,19 @@ class BatchTaskManager:
         self._overlay_scale: float = 1.0
         self._gif_durations: list[int] = []
 
+        # Temp dirs for intermediate files
+        self._gif_temp_dir: str = ""
+        self._mp3_temp_dir: str = ""
+
     def initialize(
         self, gif_decoder, text_layer, source_video_path,
-        output_gif_dir, output_video_dir, report_dir,
+        output_video_dir, report_dir,
         existing_file_policy="skip", sapi_engine=None,
         overlay_x=0, overlay_y=0, overlay_scale=1.0,
     ):
         self._gif_service = GifRenderService(gif_decoder)
         self._gif_text_layer = text_layer
         self._source_video_path = source_video_path
-        self._output_gif_dir = output_gif_dir
         self._output_video_dir = output_video_dir
         self._report_dir = report_dir
         self._existing_file_policy = existing_file_policy
@@ -72,22 +65,25 @@ class BatchTaskManager:
         self._overlay_x = overlay_x
         self._overlay_y = overlay_y
         self._overlay_scale = overlay_scale
-        logger.info(f"[BATCH] initialize: overlay_x={overlay_x} overlay_y={overlay_y} overlay_scale={overlay_scale}")
         self._gif_durations = gif_decoder.get_durations()
         self._stopped = False
         self._results = []
-        os.makedirs(self._output_gif_dir, exist_ok=True)
+
+        # Intermediate temp dirs (cleaned after generation)
+        self._gif_temp_dir = os.path.join(self._cache_mgr._video_temp_dir, "gif_temp")
+        self._mp3_temp_dir = os.path.join(self._cache_mgr._audio_temp_dir, "mp3_temp")
+        os.makedirs(self._gif_temp_dir, exist_ok=True)
+        os.makedirs(self._mp3_temp_dir, exist_ok=True)
         os.makedirs(self._output_video_dir, exist_ok=True)
         os.makedirs(self._report_dir, exist_ok=True)
 
-        # Pre-cache video analysis (do once, not per region)
+        # Pre-cache video analysis
         self._video_info = self._ffmpeg.probe_video(source_video_path)
         self._video_has_audio = self._video_info.has_audio
         self._video_duration = self._video_info.duration
-        logger.info(f"[BATCH] video cached: {self._video_info.width}x{self._video_info.height} "
+        logger.info(f"[BATCH] video: {self._video_info.width}x{self._video_info.height} "
                     f"dur={self._video_duration:.1f}s audio={self._video_has_audio}")
 
-        # Pre-cache source loudness for MP3 volume matching
         try:
             self._source_loudness = self._composer.analyze_loudness(source_video_path, 3.0)
         except Exception:
@@ -96,22 +92,16 @@ class BatchTaskManager:
     def run_full_pipeline(self, regions: list[dict], on_progress=None, on_mp4_done=None):
         self._stopped = False
         self._results = [{"region": r["region"], "safe_filename": r["safe_filename"],
-                          "gif": "pending", "mp3": "pending", "mp4": "pending", "error": ""}
+                          "mp4": "pending", "error": ""}
                          for r in regions]
 
-        logger.info(f"=== Pipeline start: {len(regions)} regions (pipeline-parallel) ===")
+        logger.info(f"=== Pipeline: {len(regions)} regions, {PIPELINE_WORKERS} parallel ===")
 
-        # Pipeline parallelism: each region goes GIF→MP3→MP4 independently.
-        # 6 concurrent pipelines so multiple MP4 encodings run simultaneously.
-        PIPELINE_WORKERS = 6
         total = len(regions)
         completed = 0
 
         with ThreadPoolExecutor(max_workers=PIPELINE_WORKERS) as ex:
-            futures = {
-                ex.submit(self._process_one_region, r): r
-                for r in regions
-            }
+            futures = {ex.submit(self._process_one_region, r): r for r in regions}
             for future in as_completed(futures):
                 if self._stopped:
                     break
@@ -131,55 +121,51 @@ class BatchTaskManager:
         logger.info("=== Pipeline done ===")
 
     def _process_one_region(self, r: dict):
-        """Process GIF → MP3 → MP4 for a single region end-to-end."""
         region = r["region"]
         safe = r["safe_filename"]
 
-        # --- GIF ---
-        gif_path = os.path.join(self._output_gif_dir, f"{safe}.gif")
-        if self._existing_file_policy == "skip" and os.path.isfile(gif_path) and os.path.getsize(gif_path) > 0:
-            self._find_result(safe)["gif"] = "ok"
-        else:
+        # --- Step 1: Render GIF (temp) ---
+        gif_path = os.path.join(self._gif_temp_dir, f"{safe}.gif")
+        if not (self._existing_file_policy == "skip" and os.path.isfile(gif_path) and os.path.getsize(gif_path) > 0):
             try:
                 ok = self._gif_service.render_one(
-                    region, safe, self._gif_text_layer, gif_path, "",
-                    skip_png=True,
-                )
-                self._find_result(safe)["gif"] = "ok" if ok else "fail"
+                    region, safe, self._gif_text_layer, gif_path, "", skip_png=True)
+                if not ok:
+                    self._find_result(safe)["mp4"] = "fail"
+                    self._find_result(safe)["error"] = "GIF render failed"
+                    return
             except Exception as e:
-                self._find_result(safe)["gif"] = "fail"
+                self._find_result(safe)["mp4"] = "fail"
                 self._find_result(safe)["error"] = str(e)
                 return
 
         if self._stopped:
             return
 
-        # --- MP3 ---
-        mp3_path = os.path.join(self._output_gif_dir, f"{safe}.mp3")
-        if self._existing_file_policy == "skip" and os.path.isfile(mp3_path) and os.path.getsize(mp3_path) > 0:
-            self._find_result(safe)["mp3"] = "ok"
-        elif self._sapi_engine:
+        # --- Step 2: Synthesize MP3 (temp) ---
+        mp3_path = os.path.join(self._mp3_temp_dir, f"{safe}.mp3")
+        if self._sapi_engine and not (
+            self._existing_file_policy == "skip" and os.path.isfile(mp3_path) and os.path.getsize(mp3_path) > 0
+        ):
+            ok = False
             for attempt in range(MAX_RETRIES + 1):
                 try:
                     ok = self._sapi_engine.synthesize(region, "", mp3_path)
                     if ok:
-                        self._find_result(safe)["mp3"] = "ok"
                         break
                 except Exception:
                     pass
-                if attempt == MAX_RETRIES:
-                    self._find_result(safe)["mp3"] = "fail"
-        else:
-            self._find_result(safe)["mp3"] = "skip"
+                if attempt < MAX_RETRIES:
+                    logger.warning(f"MP3 retry {attempt+1}: {region}")
+            if not ok:
+                self._find_result(safe)["mp4"] = "fail"
+                self._find_result(safe)["error"] = "TTS failed"
+                return
 
         if self._stopped:
             return
 
-        # --- MP4 ---
-        if self._find_result(safe).get("gif") != "ok" or self._find_result(safe).get("mp3") != "ok":
-            self._find_result(safe)["mp4"] = "fail"
-            return
-
+        # --- Step 3: Compose MP4 (final output) ---
         mp4_path = os.path.join(self._output_video_dir, f"{safe}.mp4")
         if self._existing_file_policy == "skip" and os.path.isfile(mp4_path) and os.path.getsize(mp4_path) > 0:
             self._find_result(safe)["mp4"] = "ok"
@@ -204,12 +190,21 @@ class BatchTaskManager:
                 )
                 if ok and os.path.isfile(mp4_path) and os.path.getsize(mp4_path) > 0:
                     self._find_result(safe)["mp4"] = "ok"
+                    # Clean up intermediate files to prevent disk overflow
+                    for tmp in [gif_path, mp3_path, adjusted_mp3]:
+                        try:
+                            if os.path.isfile(tmp):
+                                os.remove(tmp)
+                        except Exception:
+                            pass
                     return
             except Exception as e:
                 logger.error(f"MP4 error [{region}]: {e}")
             if attempt < MAX_RETRIES:
                 logger.warning(f"MP4 retry {attempt+1}: {region}")
+
         self._find_result(safe)["mp4"] = "fail"
+        self._find_result(safe)["error"] = "FFmpeg failed"
 
     def _find_result(self, safe_filename: str) -> dict:
         for r in self._results:
@@ -218,36 +213,24 @@ class BatchTaskManager:
         return {}
 
     def _write_report(self):
-        success = [r for r in self._results
-                   if r.get("gif") == "ok" and r.get("mp3") == "ok" and r.get("mp4") == "ok"]
+        success = [r for r in self._results if r.get("mp4") == "ok"]
         failed = [r for r in self._results if r not in success]
-        skipped = [r for r in self._results
-                   if r.get("gif") == "skip" and r.get("mp3") == "skip" and r.get("mp4") == "skip"]
 
-        report = {
-            "time": datetime.now().isoformat(),
-            "total": len(self._results),
-            "success": len(success),
-            "failed": len(failed),
-            "skipped": len(skipped),
-            "success_list": [r["region"] for r in success],
-            "failed_list": [{"region": r["region"], "error": r.get("error", "")} for r in failed],
-            "skipped_list": [r["region"] for r in skipped],
-        }
-
-        report_path = os.path.join(self._report_dir, "report.json")
+        report_path = os.path.join(self._output_video_dir, "AA视频生成报告.txt")
         with open(report_path, "w", encoding="utf-8") as f:
-            json.dump(report, f, ensure_ascii=False, indent=2)
+            f.write(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"总计: {len(self._results)}  成功: {len(success)}  失败: {len(failed)}\n")
+            f.write("=" * 40 + "\n\n")
+            f.write("【成功】\n")
+            for r in success:
+                f.write(f"  OK  {r['region']}.mp4\n")
+            if failed:
+                f.write("\n【失败】\n")
+                for r in failed:
+                    f.write(f"  FAIL  {r['region']}.mp4  ({r.get('error', '')})\n")
+            f.write(f"\n" + "=" * 40 + "\n")
 
-        # Also write simple text files
-        with open(os.path.join(self._report_dir, "成功.txt"), "w", encoding="utf-8") as f:
-            f.write("\n".join(report["success_list"]))
-
-        with open(os.path.join(self._report_dir, "失败.txt"), "w", encoding="utf-8") as f:
-            for item in report["failed_list"]:
-                f.write(f"{item['region']}: {item['error']}\n")
-
-        logger.info(f"Report: {report['success']} ok, {report['failed']} failed, {report['skipped']} skipped")
+        logger.info(f"Report: {len(success)} ok, {len(failed)} failed -> {report_path}")
 
     def stop(self):
         self._stopped = True

@@ -73,7 +73,7 @@ class BatchPage(QWidget):
         header_row.addWidget(self._timer_label)
         layout.addLayout(header_row)
 
-        desc = QLabel("一键生成所有地区的 GIF、MP3 和 MP4。结果保存到 output/ 目录。")
+        desc = QLabel("一键生成所有地区的 MP4 视频。结果保存到 output/ 目录。")
         desc.setWordWrap(True)
         desc.setStyleSheet("color: #7f8c8d; font-size: 13px;")
         layout.addWidget(desc)
@@ -83,21 +83,9 @@ class BatchPage(QWidget):
         self._status_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #2c3e50;")
         layout.addWidget(self._status_label)
 
-        # Progress bars
+        # Progress bar (MP4 only)
         prog_group = QGroupBox("进度")
         prog_layout = QVBoxLayout(prog_group)
-
-        gif_row = QHBoxLayout()
-        gif_row.addWidget(QLabel("GIF:"))
-        self._gif_bar = QProgressBar()
-        gif_row.addWidget(self._gif_bar, 1)
-        prog_layout.addLayout(gif_row)
-
-        mp3_row = QHBoxLayout()
-        mp3_row.addWidget(QLabel("MP3:"))
-        self._mp3_bar = QProgressBar()
-        mp3_row.addWidget(self._mp3_bar, 1)
-        prog_layout.addLayout(mp3_row)
 
         mp4_row = QHBoxLayout()
         mp4_row.addWidget(QLabel("MP4:"))
@@ -198,13 +186,7 @@ class BatchPage(QWidget):
     def _on_progress(self, step: str, p: dict):
         cur = p.get("current", 0)
         total = p.get("total", 1)
-        if step == "gif":
-            self._gif_bar.setMaximum(max(1, total))
-            self._gif_bar.setValue(cur)
-        elif step == "mp3":
-            self._mp3_bar.setMaximum(max(1, total))
-            self._mp3_bar.setValue(cur)
-        elif step == "mp4":
+        if step == "mp4":
             self._mp4_bar.setMaximum(max(1, total))
             self._mp4_bar.setValue(cur)
 
@@ -224,16 +206,14 @@ class BatchPage(QWidget):
         self._tick_timer()
         elapsed = int(time.time() - self._start_time)
         self._status_label.setText(
-            f"生成完成！耗时 {elapsed // 60}分{elapsed % 60}秒 | 报告: output/报告/"
+            f"生成完成！耗时 {elapsed // 60}分{elapsed % 60}秒 | 报告: AA视频生成报告.txt"
         )
         QMessageBox.information(
             self, "完成",
             f"批量生成完成！\n\n"
             f"耗时: {elapsed // 60}分{elapsed % 60}秒\n\n"
             f"输出文件:\n"
-            f"  output/材料库/  — GIF 和 MP3\n"
-            f"  output/生成的视频/  — 最终 MP4\n"
-            f"  output/报告/  — 成功/失败清单"
+            f"  output/生成的视频/  — MP4 视频 + AA视频生成报告.txt"
         )
 
     def set_output_dir(self, path: str):

@@ -7,3 +7,5 @@ pyttsx3>=2.90
 pydub>=0.25.1
 requests>=2.31
 python-dotenv>=1.0
+edge-tts>=6.1
+piper-tts>=1.2

@@ -6,7 +6,6 @@ from utils.logger import get_logger
 logger = get_logger()
 
 REQUIRED_DIRS = [
-    "output/材料库",
     "output/生成的视频",
     "cache/render_frames",
     "cache/audio_temp",

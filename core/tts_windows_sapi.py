@@ -20,6 +20,7 @@ class WindowsSapiTTSEngine(BaseTTSEngine):
     def __init__(self, ffmpeg_path: str = "ffmpeg"):
         self._ffmpeg = ffmpeg_path
         self._voices: list[dict] = []
+        self._voice: str = ""
         self._init_voices()
 
     def _init_voices(self):
@@ -84,8 +85,9 @@ class WindowsSapiTTSEngine(BaseTTSEngine):
             safe_text = text.replace('"', '""').replace('\n', ' ').replace('\r', '')
 
             voice_cmd = ""
-            if voice_id:
-                safe_voice = voice_id.replace('"', '""')
+            vid = voice_id or self._voice
+            if vid:
+                safe_voice = vid.replace('"', '""')
                 voice_cmd = f'$s.SelectVoice("{safe_voice}");'
 
             rate = int((speed - 1.0) * 10)  # -10 to 10

@@ -1,3 +1,4 @@
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QComboBox, QGroupBox, QTableWidget, QTableWidgetItem,
@@ -35,6 +36,7 @@ class ApiKeyDialog(QDialog):
 
         self._provider_combo = QComboBox()
         self._provider_combo.addItems(["custom_http", "volcengine", "aliyun", "tencent", "azure"])
+        self._provider_combo.currentTextChanged.connect(self._on_provider_changed)
         if edit_data:
             idx = self._provider_combo.findText(edit_data.get("provider", "custom_http"))
             if idx >= 0:
@@ -68,6 +70,18 @@ class ApiKeyDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addRow(buttons)
 
+    def _on_provider_changed(self, provider: str):
+        if provider == "volcengine":
+            self._endpoint_edit.setText("https://openspeech.bytedance.com/api/v1/tts")
+            self._endpoint_edit.setReadOnly(True)
+            self._api_key_edit.setPlaceholderText("输入 Access Token")
+            self._app_id_edit.setPlaceholderText("输入 App ID (必填)")
+        else:
+            self._endpoint_edit.setReadOnly(False)
+            self._endpoint_edit.setPlaceholderText("https://api.example.com/tts")
+            self._api_key_edit.setPlaceholderText("输入 API Key")
+            self._app_id_edit.setPlaceholderText("可选")
+
     def get_data(self) -> dict:
         return {
             "config_id": self._config_id_edit.text().strip(),
@@ -81,6 +95,8 @@ class ApiKeyDialog(QDialog):
 
 
 class ApiKeyPage(QWidget):
+    keys_changed = Signal()
+
     def __init__(self):
         super().__init__()
         self._mgr = ApiKeyManager()
@@ -140,6 +156,7 @@ class ApiKeyPage(QWidget):
             self._table.setItem(i, 3, QTableWidgetItem(c["masked_key"]))
             status = "启用" if c["enabled"] else "禁用"
             self._table.setItem(i, 4, QTableWidgetItem(status))
+        self.keys_changed.emit()
 
     def _add_config(self):
         dlg = ApiKeyDialog(self)
