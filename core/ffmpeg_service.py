@@ -17,11 +17,22 @@ class FFmpegService:
         self._detect()
 
     def _detect(self) -> None:
-        search_paths = [
-            resolve_path("tools", "ffmpeg"),
-            get_app_dir(),
-        ]
+        # Search order:
+        # 1. EXE directory (for PyInstaller bundles, user puts ffmpeg next to exe)
+        # 2. EXE directory / tools/ffmpeg/
+        # 3. Project tools/ffmpeg/ (dev mode)
+        # 4. System PATH
+        exe_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else None
+        search_paths = []
+        if exe_dir:
+            search_paths.append(exe_dir)
+            search_paths.append(os.path.join(exe_dir, "tools", "ffmpeg"))
+        search_paths.append(resolve_path("tools", "ffmpeg"))
+        search_paths.append(get_app_dir())
+
         for base in search_paths:
+            if not os.path.isdir(base):
+                continue
             ffmpeg_exe = os.path.join(base, "ffmpeg.exe")
             ffprobe_exe = os.path.join(base, "ffprobe.exe")
             if os.path.isfile(ffmpeg_exe):
@@ -105,9 +116,10 @@ class FFmpegService:
                     "-print_format", "json",
                     "-show_format",
                     "-show_streams",
-                    video_path,
+                    os.path.normpath(video_path),
                 ],
                 capture_output=True, text=True, timeout=30,
+                encoding="utf-8", errors="replace",
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
             )
             if result.returncode != 0:
@@ -150,9 +162,10 @@ class FFmpegService:
             return False
         try:
             result = subprocess.run(
-                [self._ffmpeg_path, "-y", "-i", video_path, "-vframes", "1",
-                 "-q:v", "2", output_png_path],
+                [self._ffmpeg_path, "-y", "-i", os.path.normpath(video_path),
+                 "-vframes", "1", "-q:v", "2", os.path.normpath(output_png_path)],
                 capture_output=True, text=True, timeout=30,
+                encoding="utf-8", errors="replace",
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
             )
             ok = result.returncode == 0 and os.path.isfile(output_png_path)

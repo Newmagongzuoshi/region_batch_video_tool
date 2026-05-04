@@ -4,7 +4,8 @@ import sys
 
 def get_app_dir() -> str:
     if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
+        # PyInstaller --onefile extracts to sys._MEIPASS
+        return getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -15,6 +16,11 @@ def ensure_dir(path: str) -> str:
 
 def resolve_path(*segments: str) -> str:
     return os.path.normpath(os.path.join(get_app_dir(), *segments))
+
+
+def to_native_path(path: str) -> str:
+    """Ensure path works with subprocess calls (handles Chinese chars)."""
+    return os.path.normpath(path)
 
 
 def safe_filename(name: str) -> str:

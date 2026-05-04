@@ -256,6 +256,7 @@ class VideoComposer:
             result = subprocess.run(
                 cmd,
                 capture_output=True, text=True, timeout=300,
+                encoding="utf-8", errors="replace",
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
             )
 
