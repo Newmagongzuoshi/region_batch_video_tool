@@ -30,8 +30,6 @@ class EdgeTTSEngine(BaseTTSEngine):
     def __init__(self, ffmpeg_path: str = "ffmpeg"):
         self._ffmpeg = ffmpeg_path
         self._voice = "zh-CN-XiaoxiaoNeural"
-        self._lock = threading.Lock()
-        self._last_request = 0.0
 
     @property
     def engine_name(self) -> str:
@@ -46,14 +44,6 @@ class EdgeTTSEngine(BaseTTSEngine):
             return True
         except ImportError:
             return False
-
-    def _rate_limit(self):
-        with self._lock:
-            now = time.time()
-            gap = now - self._last_request
-            if gap < 3.0:
-                time.sleep(3.0 - gap)
-            self._last_request = time.time()
 
     def _call_edge(self, text: str, voice: str, rate_str: str,
                    pitch_str: str, vol_str: str) -> bytes | None:
@@ -120,7 +110,6 @@ class EdgeTTSEngine(BaseTTSEngine):
             vol_str = f"{int((volume - 1.0) * 100):+d}%"
 
             for attempt in range(self.MAX_RETRIES + 1):
-                self._rate_limit()
                 audio_data = self._call_edge(text, voice, rate_str, pitch_str, vol_str)
                 if audio_data:
                     if output_path:

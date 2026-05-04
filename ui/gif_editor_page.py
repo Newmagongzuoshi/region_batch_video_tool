@@ -394,6 +394,7 @@ class GifEditorPage(QWidget):
         self._decoder = GifFrameDecoder()
         self._decoder.load(gif_path)
         self._canvas.set_decoder(self._decoder)
+        self._canvas.zoom_fit()
         self._update_gif_info_label()
 
     def set_video_path(self, video_path: str):
@@ -459,6 +460,7 @@ class GifEditorPage(QWidget):
             return
 
         self._canvas.set_preview_background(self._preview_frame_path)
+        self._canvas.zoom_fit()
         self._preview_group.setVisible(True)
         self._bg_combo.setEnabled(False)
 

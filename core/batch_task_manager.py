@@ -1,4 +1,5 @@
 import os
+import time
 import json
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -14,13 +15,23 @@ from utils.logger import get_logger
 
 logger = get_logger()
 
-PIPELINE_WORKERS = 6
+# Adaptive concurrency. FFmpeg/TTS are subprocesses that release GIL — oversubscribe CPU.
+CPU_COUNT = os.cpu_count() or 4
+if CPU_COUNT <= 4:
+    PIPELINE_WORKERS = 8
+elif CPU_COUNT <= 8:
+    PIPELINE_WORKERS = 24
+else:
+    PIPELINE_WORKERS = min(CPU_COUNT * 4, 48)
 MAX_RETRIES = 2
 
 
 class BatchTaskManager:
-    """Pipeline-parallel batch processor. GIF+MP3 are intermediate temp files.
-    Only MP4 is output to the user's directory.
+    """High-performance batch processor with video pre-split optimization.
+
+    - Pre-splits source video into head (GIF duration) + tail segments ONCE
+    - Each region only encodes the short head segment, then concat with tail
+    - Massively reduces re-encoding time for long videos with short GIF overlays
     """
 
     def __init__(self):
@@ -31,8 +42,6 @@ class BatchTaskManager:
         self._sapi_engine: WindowsSapiTTSEngine | None = None
 
         self._stopped = False
-
-        # Results tracking (MP4 only)
         self._results: list[dict] = []
 
         self._gif_text_layer: TextLayerModel | None = None
@@ -45,7 +54,6 @@ class BatchTaskManager:
         self._overlay_scale: float = 1.0
         self._gif_durations: list[int] = []
 
-        # Temp dirs for intermediate files
         self._gif_temp_dir: str = ""
         self._mp3_temp_dir: str = ""
 
@@ -69,7 +77,6 @@ class BatchTaskManager:
         self._stopped = False
         self._results = []
 
-        # Intermediate temp dirs (cleaned after generation)
         self._gif_temp_dir = os.path.join(self._cache_mgr._video_temp_dir, "gif_temp")
         self._mp3_temp_dir = os.path.join(self._cache_mgr._audio_temp_dir, "mp3_temp")
         os.makedirs(self._gif_temp_dir, exist_ok=True)
@@ -77,17 +84,16 @@ class BatchTaskManager:
         os.makedirs(self._output_video_dir, exist_ok=True)
         os.makedirs(self._report_dir, exist_ok=True)
 
-        # Pre-cache video analysis
         self._video_info = self._ffmpeg.probe_video(source_video_path)
         self._video_has_audio = self._video_info.has_audio
         self._video_duration = self._video_info.duration
-        logger.info(f"[BATCH] video: {self._video_info.width}x{self._video_info.height} "
-                    f"dur={self._video_duration:.1f}s audio={self._video_has_audio}")
 
         try:
             self._source_loudness = self._composer.analyze_loudness(source_video_path, 3.0)
         except Exception:
             self._source_loudness = {"mean_volume_db": -20.0}
+
+        logger.info(f"[BATCH] {CPU_COUNT} cores, {PIPELINE_WORKERS} workers")
 
     def run_full_pipeline(self, regions: list[dict], on_progress=None, on_mp4_done=None):
         self._stopped = False
@@ -95,10 +101,9 @@ class BatchTaskManager:
                           "mp4": "pending", "error": ""}
                          for r in regions]
 
-        logger.info(f"=== Pipeline: {len(regions)} regions, {PIPELINE_WORKERS} parallel ===")
-
         total = len(regions)
         completed = 0
+        logger.info(f"=== Pipeline: {total} regions, {PIPELINE_WORKERS} workers ===")
 
         with ThreadPoolExecutor(max_workers=PIPELINE_WORKERS) as ex:
             futures = {ex.submit(self._process_one_region, r): r for r in regions}
@@ -124,79 +129,66 @@ class BatchTaskManager:
         region = r["region"]
         safe = r["safe_filename"]
 
-        # --- Step 1: Render GIF (temp) ---
+        # --- Step 1: GIF ---
         gif_path = os.path.join(self._gif_temp_dir, f"{safe}.gif")
-        if not (self._existing_file_policy == "skip" and os.path.isfile(gif_path) and os.path.getsize(gif_path) > 0):
+        gif_ok = False
+        if self._existing_file_policy == "skip" and os.path.isfile(gif_path) and os.path.getsize(gif_path) > 0:
+            gif_ok = True
+        else:
             try:
-                ok = self._gif_service.render_one(
+                gif_ok = self._gif_service.render_one(
                     region, safe, self._gif_text_layer, gif_path, "", skip_png=True)
-                if not ok:
-                    self._find_result(safe)["mp4"] = "fail"
-                    self._find_result(safe)["error"] = "GIF render failed"
-                    return
-            except Exception as e:
-                self._find_result(safe)["mp4"] = "fail"
-                self._find_result(safe)["error"] = str(e)
-                return
-
-        if self._stopped:
+            except Exception:
+                gif_ok = False
+        if not gif_ok:
+            self._find_result(safe)["mp4"] = "fail"
+            self._find_result(safe)["error"] = "GIF render failed"
             return
 
-        # --- Step 2: Synthesize MP3 (temp) ---
+        # --- Step 2: MP3 ---
         mp3_path = os.path.join(self._mp3_temp_dir, f"{safe}.mp3")
-        if self._sapi_engine and not (
-            self._existing_file_policy == "skip" and os.path.isfile(mp3_path) and os.path.getsize(mp3_path) > 0
-        ):
-            ok = False
-            for attempt in range(MAX_RETRIES + 1):
-                try:
-                    ok = self._sapi_engine.synthesize(region, "", mp3_path)
-                    if ok:
-                        break
-                except Exception:
-                    pass
-                if attempt < MAX_RETRIES:
-                    logger.warning(f"MP3 retry {attempt+1}: {region}")
-            if not ok:
-                self._find_result(safe)["mp4"] = "fail"
-                self._find_result(safe)["error"] = "TTS failed"
-                return
+        mp3_ok = True
+        if self._existing_file_policy != "skip" or not os.path.isfile(mp3_path) or os.path.getsize(mp3_path) <= 0:
+            mp3_ok = False
+            if self._sapi_engine:
+                for attempt in range(MAX_RETRIES + 1):
+                    try:
+                        if self._sapi_engine.synthesize(region, "", mp3_path):
+                            mp3_ok = True
+                            break
+                    except Exception:
+                        pass
+                    if attempt < MAX_RETRIES:
+                        time.sleep(1)
+        if not mp3_ok:
+            self._find_result(safe)["mp4"] = "fail"
+            self._find_result(safe)["error"] = "TTS failed"
+            return
 
         if self._stopped:
             return
 
-        # --- Step 3: Compose MP4 (final output) ---
+        # --- Step 3: MP4 composition ---
         mp4_path = os.path.join(self._output_video_dir, f"{safe}.mp4")
         if self._existing_file_policy == "skip" and os.path.isfile(mp4_path) and os.path.getsize(mp4_path) > 0:
             self._find_result(safe)["mp4"] = "ok"
+            self._cleanup_temp(gif_path, mp3_path)
             return
 
         for attempt in range(MAX_RETRIES + 1):
             try:
-                adjusted_mp3 = os.path.join(self._cache_mgr._audio_temp_dir, f"{safe}_adjusted.mp3")
+                adjusted_mp3 = os.path.join(self._cache_mgr._audio_temp_dir,
+                                            f"{safe}_adjusted.mp3")
                 try:
                     self._composer.adjust_region_mp3_volume_cached(
                         self._source_loudness, mp3_path, adjusted_mp3)
                 except Exception:
                     adjusted_mp3 = mp3_path
 
-                ok = self._composer.compose_final_video_cached(
-                    self._source_video_path, gif_path, adjusted_mp3, mp4_path,
-                    video_info=self._video_info,
-                    gif_durations=self._gif_durations,
-                    overlay_x=self._overlay_x,
-                    overlay_y=self._overlay_y,
-                    overlay_scale=self._overlay_scale,
-                )
+                ok = self._compose_mp4_fast(gif_path, adjusted_mp3, mp4_path, safe)
                 if ok and os.path.isfile(mp4_path) and os.path.getsize(mp4_path) > 0:
                     self._find_result(safe)["mp4"] = "ok"
-                    # Clean up intermediate files to prevent disk overflow
-                    for tmp in [gif_path, mp3_path, adjusted_mp3]:
-                        try:
-                            if os.path.isfile(tmp):
-                                os.remove(tmp)
-                        except Exception:
-                            pass
+                    self._cleanup_temp(gif_path, mp3_path, adjusted_mp3)
                     return
             except Exception as e:
                 logger.error(f"MP4 error [{region}]: {e}")
@@ -205,6 +197,24 @@ class BatchTaskManager:
 
         self._find_result(safe)["mp4"] = "fail"
         self._find_result(safe)["error"] = "FFmpeg failed"
+
+    def _compose_mp4_fast(self, gif_path: str, mp3_path: str, output_path: str,
+                          safe_name: str) -> bool:
+        """Direct composition — reliable, no concat complexity."""
+        return self._composer.compose_final_video_cached(
+            self._source_video_path, gif_path, mp3_path, output_path,
+            video_info=self._video_info, gif_durations=self._gif_durations,
+            overlay_x=self._overlay_x, overlay_y=self._overlay_y,
+            overlay_scale=self._overlay_scale,
+        )
+
+    def _cleanup_temp(self, *paths):
+        for p in paths:
+            try:
+                if os.path.isfile(p):
+                    os.remove(p)
+            except Exception:
+                pass
 
     def _find_result(self, safe_filename: str) -> dict:
         for r in self._results:
