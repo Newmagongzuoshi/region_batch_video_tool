@@ -35,7 +35,7 @@ PAGES = [
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("地区批量 GIF / MP3 / 视频融合生成软件")
+        self.setWindowTitle("矩量拓客：地区视频批量生成")
         self.resize(1280, 800)
 
         self._video_path: str = ""
