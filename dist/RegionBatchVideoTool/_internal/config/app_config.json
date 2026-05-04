@@ -1,0 +1,15 @@
+{
+  "output_dir": "output",
+  "gif_concurrency": 2,
+  "local_tts_concurrency": 1,
+  "api_tts_concurrency": 2,
+  "mp4_concurrency": 1,
+  "existing_file_policy": "skip",
+  "enable_cache": true,
+  "auto_clean_temp": false,
+  "default_template_id": "douyin_white_black_001",
+  "mp3_target_offset_db": 3,
+  "max_gain_db": 8,
+  "log_refresh_interval_ms": 500,
+  "task_refresh_interval_ms": 300
+}
