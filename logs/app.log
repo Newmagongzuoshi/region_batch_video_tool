@@ -16668,3 +16668,18 @@
 2026-05-04 11:04:16 [INFO] region_batch_video_tool: Final video composed: C:\Users\Administrator\Desktop\视频生成测试\输出测试\生成的视频\湘西古丈县.mp4
 2026-05-04 11:04:16 [INFO] region_batch_video_tool: Report: 207 ok, 0 failed -> C:\Users\Administrator\Desktop\视频生成测试\输出测试\生成的视频\AA视频生成报告.txt
 2026-05-04 11:04:16 [INFO] region_batch_video_tool: === Pipeline done ===
+2026-05-04 11:57:04 [INFO] region_batch_video_tool: Logger initialized
+2026-05-04 11:57:04 [INFO] region_batch_video_tool: FFmpeg: C:\Users\Administrator\VS Code Projects\region_batch_video_tool\tools\ffmpeg\ffmpeg.exe
+2026-05-04 11:57:04 [INFO] region_batch_video_tool: FFprobe: C:\Users\Administrator\VS Code Projects\region_batch_video_tool\tools\ffmpeg\ffprobe.exe
+2026-05-04 13:10:59 [INFO] region_batch_video_tool: Logger initialized
+2026-05-04 13:10:59 [INFO] region_batch_video_tool: FFmpeg: C:\Users\Administrator\VS Code Projects\region_batch_video_tool\tools\ffmpeg\ffmpeg.exe
+2026-05-04 13:10:59 [INFO] region_batch_video_tool: FFprobe: C:\Users\Administrator\VS Code Projects\region_batch_video_tool\tools\ffmpeg\ffprobe.exe
+2026-05-04 13:11:00 [INFO] region_batch_video_tool: FFmpeg: C:\Users\Administrator\VS Code Projects\region_batch_video_tool\tools\ffmpeg\ffmpeg.exe
+2026-05-04 13:11:00 [INFO] region_batch_video_tool: FFprobe: C:\Users\Administrator\VS Code Projects\region_batch_video_tool\tools\ffmpeg\ffprobe.exe
+2026-05-04 13:11:00 [INFO] region_batch_video_tool: Loaded 50 built-in templates
+2026-05-04 13:11:00 [INFO] region_batch_video_tool: Loaded 1 custom templates
+2026-05-04 13:11:00 [INFO] region_batch_video_tool: FFmpeg: C:\Users\Administrator\VS Code Projects\region_batch_video_tool\tools\ffmpeg\ffmpeg.exe
+2026-05-04 13:11:00 [INFO] region_batch_video_tool: FFprobe: C:\Users\Administrator\VS Code Projects\region_batch_video_tool\tools\ffmpeg\ffprobe.exe
+2026-05-04 13:11:00 [INFO] region_batch_video_tool: FFmpeg: C:\Users\Administrator\VS Code Projects\region_batch_video_tool\tools\ffmpeg\ffmpeg.exe
+2026-05-04 13:11:00 [INFO] region_batch_video_tool: FFprobe: C:\Users\Administrator\VS Code Projects\region_batch_video_tool\tools\ffmpeg\ffprobe.exe
+2026-05-04 13:11:01 [INFO] region_batch_video_tool: Found 2 SAPI voices via PowerShell
