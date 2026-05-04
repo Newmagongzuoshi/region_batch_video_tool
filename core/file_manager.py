@@ -10,6 +10,7 @@ REQUIRED_DIRS = [
     "cache/render_frames",
     "cache/audio_temp",
     "cache/video_temp",
+    "custom_styles",
     "logs",
 ]
 
@@ -47,3 +48,7 @@ def get_video_temp_dir() -> str:
 
 def get_logs_dir() -> str:
     return resolve_path("logs")
+
+
+def get_custom_styles_dir() -> str:
+    return resolve_path("custom_styles")

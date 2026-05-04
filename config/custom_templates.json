@@ -25,6 +25,35 @@
       "opacity": 1.0,
       "letter_spacing": 0,
       "line_spacing": 8
+    },
+    {
+      "template_id": "custom_052",
+      "template_name": "我的自定义样式",
+      "category": "自定义",
+      "font_family": "Microsoft YaHei",
+      "font_size": 68,
+      "bold": true,
+      "italic": false,
+      "fill_color": "#FFFFFF",
+      "opacity": 1.0,
+      "stroke_enabled": true,
+      "stroke_color": "#000000",
+      "stroke_width": 8,
+      "shadow_enabled": true,
+      "shadow_color": "#000000",
+      "shadow_opacity": 0.5,
+      "shadow_offset_x": 3,
+      "shadow_offset_y": 0,
+      "shadow_blur": 4,
+      "background_enabled": true,
+      "background_color": "#000000",
+      "background_opacity": 0.54,
+      "background_radius": 12,
+      "background_padding": 10,
+      "border_enabled": false,
+      "border_color": "#FFFFFF",
+      "border_width": 1,
+      "border_opacity": 1.0
     }
   ]
 }

@@ -109,6 +109,26 @@ class TemplateManager:
         self._save_custom()
         return True
 
+    def add_session_template(self, template_id: str, template_name: str,
+                             category: str, style: dict) -> bool:
+        """Add a session-only template that is NOT persisted to disk."""
+        style["template_id"] = template_id
+        style["template_name"] = template_name
+        style["category"] = category
+
+        # Remove existing session templates with same ID
+        self._custom = [t for t in self._custom if t.template_id != template_id]
+
+        tmpl = TemplateModel(
+            template_id=template_id,
+            template_name=template_name,
+            category=category,
+            style=style,
+            built_in=False,
+        )
+        self._custom.append(tmpl)
+        return True
+
     def delete_custom_template(self, template_id: str) -> bool:
         before = len(self._custom)
         self._custom = [t for t in self._custom if t.template_id != template_id]

@@ -1,6 +1,6 @@
-from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
-from PySide6.QtCore import Qt, QRectF, QTimer, Signal
-from PySide6.QtGui import QPixmap, QImage, QPainter, QColor, QPen, QBrush
+from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsRectItem
+from PySide6.QtCore import Qt, QRectF, QTimer, Signal, QPointF
+from PySide6.QtGui import QPixmap, QImage, QPainter, QColor, QPen, QBrush, QCursor
 from PIL import Image
 
 from core.gif_frame_decoder import GifFrameDecoder
@@ -12,6 +12,7 @@ class GifCanvasView(QGraphicsView):
     frame_changed = Signal(int, int)
     gif_position_changed = Signal(float, float)
     zoom_changed = Signal(int)
+    region_selected = Signal(QRectF)  # Rubber-band selection complete (scene coords)
 
     def __init__(self):
         super().__init__()
@@ -33,6 +34,16 @@ class GifCanvasView(QGraphicsView):
         self._playing: bool = False
         self._timer: QTimer | None = None
         self._elapsed_ms: int = 0
+
+        # Rubber-band selection for 框选文字
+        self._selection_mode: bool = False
+        self._sel_origin = None  # QPointF from mapToScene
+        self._sel_rect_item: QGraphicsRectItem | None = None
+
+        # Guides & snap
+        self._guide_enabled: bool = True
+        self._snap_enabled: bool = True
+        self._snap_threshold: int = 10
 
         self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         self.setDragMode(QGraphicsView.DragMode.NoDrag)
@@ -286,11 +297,68 @@ class GifCanvasView(QGraphicsView):
         else:
             painter.drawTiledPixmap(rect, self._checker_pixmap)
 
+    # ---- Rubber-band selection mode ----
+
+    def set_selection_mode(self, enabled: bool):
+        """Toggle box-select mode. When on, mouse drag draws a live selection rect."""
+        self._selection_mode = enabled
+        if enabled:
+            self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
+            if self._playing:
+                self.pause()
+        else:
+            self._clear_selection_rubber_band()
+            self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+
+    def is_selection_mode(self) -> bool:
+        return self._selection_mode
+
+    def _clear_selection_rubber_band(self):
+        self._sel_origin = None
+        if self._sel_rect_item:
+            self._scene.removeItem(self._sel_rect_item)
+            self._sel_rect_item = None
+
+    def mousePressEvent(self, event):
+        if self._selection_mode and event.button() == Qt.MouseButton.LeftButton:
+            self._clear_selection_rubber_band()
+            sp = self.mapToScene(event.pos())
+            self._sel_origin = sp
+            # Create live selection rect on scene
+            pen = QPen(QColor("#00D2FF"), 2, Qt.PenStyle.DashLine)
+            brush = QBrush(QColor(0, 210, 255, 40))
+            self._sel_rect_item = QGraphicsRectItem(QRectF(sp, sp))
+            self._sel_rect_item.setPen(pen)
+            self._sel_rect_item.setBrush(brush)
+            self._sel_rect_item.setZValue(20)
+            self._scene.addItem(self._sel_rect_item)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._selection_mode and self._sel_rect_item and self._sel_origin:
+            sp = self.mapToScene(event.pos())
+            rect = QRectF(self._sel_origin, sp).normalized()
+            self._sel_rect_item.setRect(rect)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
     def mouseReleaseEvent(self, event):
+        if self._selection_mode and self._sel_rect_item:
+            scene_rect = self._sel_rect_item.rect()
+            # Keep the rect visible as feedback; it will be cleared on next selection or mode exit
+            self.region_selected.emit(scene_rect)
+            event.accept()
+            return
+
         super().mouseReleaseEvent(event)
         if self._preview_mode and self._gif_item:
             pos = self._gif_item.pos()
             self.gif_position_changed.emit(pos.x(), pos.y())
+
+    # ---- Public helpers ----
 
     def add_text_item(self, draggable_item, parent_item=None) -> None:
         self._draggable_text = draggable_item
@@ -303,3 +371,39 @@ class GifCanvasView(QGraphicsView):
         if self._draggable_text:
             self._scene.removeItem(self._draggable_text)
             self._draggable_text = None
+
+    def get_current_frame_pil(self) -> Image.Image | None:
+        """Return the current frame as a PIL RGBA Image (for analysis)."""
+        if not self._decoder:
+            return None
+        return self._decoder.get_frame(self._current_frame_idx)
+
+    # ---- Guides & Snap ----
+
+    def set_guides(self, enabled: bool):
+        self._guide_enabled = enabled
+        self.viewport().update()
+
+    def set_snap(self, enabled: bool):
+        self._snap_enabled = enabled
+
+    def drawForeground(self, painter: QPainter, rect: QRectF):
+        super().drawForeground(painter, rect)
+        if not self._guide_enabled:
+            return
+        sr = self._scene.sceneRect()
+        cx, cy = sr.center().x(), sr.center().y()
+        pen = QPen(QColor(100, 100, 100, 80), 1, Qt.PenStyle.DashLine)
+        painter.setPen(pen)
+        # Center cross
+        painter.drawLine(QPointF(cx, sr.top()), QPointF(cx, sr.bottom()))
+        painter.drawLine(QPointF(sr.left(), cy), QPointF(sr.right(), cy))
+        # Safe area (10% margin)
+        margin = 0.1
+        safe_l = sr.left() + sr.width() * margin
+        safe_r = sr.right() - sr.width() * margin
+        safe_t = sr.top() + sr.height() * margin
+        safe_b = sr.bottom() - sr.height() * margin
+        safe_pen = QPen(QColor(200, 200, 200, 60), 1, Qt.PenStyle.DotLine)
+        painter.setPen(safe_pen)
+        painter.drawRect(QRectF(safe_l, safe_t, safe_r - safe_l, safe_b - safe_t))
