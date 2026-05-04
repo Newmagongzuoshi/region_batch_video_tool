@@ -17,7 +17,7 @@ def main():
 
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
     app = QApplication(sys.argv)
-    app.setApplicationName("RegionBatchVideoTool")
+    app.setApplicationName("矩量拓客：地区视频批量生成")
 
     # Global checkbox style — enlarge indicator without breaking native checkmark
     app.setStyleSheet("""
