@@ -4,12 +4,12 @@ import json
 import csv
 from datetime import datetime
 
-from utils.path_utils import resolve_path
+from utils.path_utils import resolve_data_path
 from utils.logger import get_logger
 
 logger = get_logger()
 
-DB_PATH = resolve_path("cache", "task_state.sqlite")
+DB_PATH = resolve_data_path("cache", "task_state.sqlite")
 
 
 class TaskStore:

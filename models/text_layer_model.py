@@ -30,6 +30,7 @@ class TextLayerModel:
     stroke_enabled: bool = True
     stroke_color: str = "#000000"
     stroke_width: int = 8
+    stroke_opacity: float = 1.0
 
     # Shadow
     shadow_enabled: bool = True
@@ -42,8 +43,10 @@ class TextLayerModel:
     # Gradient
     gradient_enabled: bool = False
     gradient_start: str = "#FFFFFF"
+    gradient_mid: str = ""  # optional mid-stop; empty=2-stop gradient
     gradient_end: str = "#FFD700"
     gradient_type: str = "linear"  # linear | radial
+    gradient_midpoint: float = 0.5  # 0.0-1.0, controls where the color transition happens
     gradient_direction: str = "topToBottom"  # leftToRight | topToBottom | leftTopToRightBot | rightTopToLeftBot
 
     # Background box
@@ -79,12 +82,13 @@ class TextLayerModel:
             weight=self.weight, letter_spacing=self.letter_spacing, line_spacing=self.line_spacing,
             align=self.align, fill_color=self.fill_color, opacity=self.opacity,
             stroke_enabled=self.stroke_enabled, stroke_color=self.stroke_color,
-            stroke_width=self.stroke_width,
+            stroke_width=self.stroke_width, stroke_opacity=self.stroke_opacity,
             shadow_enabled=self.shadow_enabled, shadow_color=self.shadow_color,
             shadow_opacity=self.shadow_opacity, shadow_offset_x=self.shadow_offset_x,
             shadow_offset_y=self.shadow_offset_y, shadow_blur=self.shadow_blur,
             gradient_enabled=self.gradient_enabled, gradient_start=self.gradient_start,
-            gradient_end=self.gradient_end, gradient_type=self.gradient_type,
+            gradient_mid=self.gradient_mid, gradient_end=self.gradient_end,
+            gradient_type=self.gradient_type, gradient_midpoint=self.gradient_midpoint,
             gradient_direction=self.gradient_direction,
             background_enabled=self.background_enabled, background_color=self.background_color,
             background_opacity=self.background_opacity, background_radius=self.background_radius,

@@ -38,6 +38,9 @@ def build():
         "--hidden-import=piper",
         "--hidden-import=cryptography.hazmat.backends",
         "--hidden-import=cryptography.hazmat.primitives",
+        "--hidden-import=core.font_manager",
+        "--hidden-import=core.font_style_analyzer",
+        "--hidden-import=ui.font_picker_dialog",
         "--collect-all", "cryptography",
     ]
 

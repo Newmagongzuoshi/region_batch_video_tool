@@ -82,7 +82,7 @@ class TextRenderService:
         use_bold = getattr(layer, "bold", True) or weight >= 600
         font = _get_font(layer.font_size, layer.font_family, layer.font_path, use_bold)
         # Extra horizontal offset for heavy weights (simulates bolder appearance)
-        weight_offset = max(0, (weight - 600) // 200)  # 700→0, 900→1
+        weight_offset = min(5, max(0, (weight - 600) // 200))  # capped at 5 to avoid perf issues
         lines = text.split("\n")
 
         # Measure each line (accounting for letter spacing)
@@ -175,7 +175,7 @@ class TextRenderService:
         # ---- stroke ----
         if layer.stroke_enabled:
             stroke_rgb = _hex_to_rgb(layer.stroke_color)
-            stroke_alpha = int(255 * layer.opacity)
+            stroke_alpha = int(255 * getattr(layer, "stroke_opacity", 1.0))
             sw = layer.stroke_width
             for dx in range(-sw, sw + 1):
                 for dy in range(-sw, sw + 1):
@@ -286,8 +286,30 @@ class TextRenderService:
                 ratio = ((max_x_val - cx) / text_w_range + (cy - min_y) / text_h_range) / 2
             else:  # topToBottom
                 ratio = (cy - min_y) / text_h_range
+            # Apply gradient midpoint (power curve for asymmetric blends)
+            midpoint = getattr(layer, "gradient_midpoint", 0.5)
+            if midpoint > 0.01 and midpoint < 0.99:
+                p = (1.0 - midpoint) / midpoint
+                ratio = ratio ** p
             ratio = max(0.0, min(1.0, ratio))
-            r = int(start_rgb[0] + (end_rgb[0] - start_rgb[0]) * ratio)
+            # 3-stop gradient support
+            mid_color = getattr(layer, "gradient_mid", "")
+            if mid_color and len(mid_color) == 7:
+                mid_rgb = _hex_to_rgb(mid_color)
+                if ratio < 0.5:
+                    t = ratio * 2
+                    r = int(start_rgb[0] + (mid_rgb[0] - start_rgb[0]) * t)
+                    g = int(start_rgb[1] + (mid_rgb[1] - start_rgb[1]) * t)
+                    b = int(start_rgb[2] + (mid_rgb[2] - start_rgb[2]) * t)
+                else:
+                    t = (ratio - 0.5) * 2
+                    r = int(mid_rgb[0] + (end_rgb[0] - mid_rgb[0]) * t)
+                    g = int(mid_rgb[1] + (end_rgb[1] - mid_rgb[1]) * t)
+                    b = int(mid_rgb[2] + (end_rgb[2] - mid_rgb[2]) * t)
+            else:
+                r = int(start_rgb[0] + (end_rgb[0] - start_rgb[0]) * ratio)
+                g = int(start_rgb[1] + (end_rgb[1] - start_rgb[1]) * ratio)
+                b = int(start_rgb[2] + (end_rgb[2] - start_rgb[2]) * ratio)
             g = int(start_rgb[1] + (end_rgb[1] - start_rgb[1]) * ratio)
             b = int(start_rgb[2] + (end_rgb[2] - start_rgb[2]) * ratio)
             for woff in range(weight_offset + 1):

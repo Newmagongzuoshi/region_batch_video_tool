@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QListWidget, QStackedWidget, QStatusBar, QLabel, QListWidgetItem,
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 
 from ui.import_page import ImportPage
 from ui.gif_editor_page import GifEditorPage
@@ -37,6 +38,11 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("矩量拓客：地区视频批量生成")
         self.resize(1280, 800)
+        # App icon
+        from utils.path_utils import resolve_path
+        icon_path = resolve_path("assets", "icon.ico")
+        if os.path.isfile(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
 
         self._video_path: str = ""
         self._gif_path: str = ""

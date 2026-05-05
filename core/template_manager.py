@@ -1,7 +1,7 @@
 import json
 import os
 from models.template_model import TemplateModel
-from utils.path_utils import resolve_path, ensure_dir
+from utils.path_utils import resolve_path, resolve_data_path
 from utils.logger import get_logger
 
 logger = get_logger()
@@ -36,7 +36,7 @@ class TemplateManager:
             logger.error(f"Failed to load built-in templates: {e}")
 
     def _custom_path(self) -> str:
-        return resolve_path("config", "custom_templates.json")
+        return resolve_data_path("config", "custom_templates.json")
 
     def _load_custom(self):
         path = self._custom_path()
@@ -60,7 +60,6 @@ class TemplateManager:
 
     def _save_custom(self):
         path = self._custom_path()
-        ensure_dir(os.path.dirname(path))
         data = {
             "templates": [
                 {**t.style, "template_id": t.template_id,

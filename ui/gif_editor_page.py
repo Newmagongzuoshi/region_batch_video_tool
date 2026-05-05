@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSpinBox, QDoubleSpinBox, QComboBox, QCheckBox, QGroupBox,
     QColorDialog, QLineEdit, QFormLayout, QSlider, QDialog,
-    QDialogButtonBox, QTextEdit, QScrollArea,
+    QDialogButtonBox, QTextEdit, QScrollArea, QGridLayout,
 )
 from PySide6.QtCore import Qt, Signal, QRectF, QEvent
 from PySide6.QtGui import QPixmap, QImage, QColor
@@ -18,6 +18,7 @@ from core.font_style_analyzer import (
 from core.file_manager import get_custom_styles_dir
 from core.font_manager import get_font_manager
 from ui.font_picker_dialog import FontPickerDialog
+from ui.style_preview_dialog import StylePreviewDialog
 from core.gif_frame_decoder import GifFrameDecoder
 from core.text_render_service import TextRenderService
 from core.template_manager import TemplateManager
@@ -296,7 +297,7 @@ class GifEditorPage(QWidget):
             )
             return btn
 
-        def _spin(min_v: int, max_v: int, val: int, w: int = 64) -> QSpinBox:
+        def _spin(min_v: int, max_v: int, val: int, w: int = 80) -> QSpinBox:
             s = QSpinBox()
             s.setRange(min_v, max_v)
             s.setValue(val)
@@ -339,30 +340,34 @@ class GifEditorPage(QWidget):
         # ---------------------------------------------------------------
         tmpl_group = _styled_group("快速套用模板")
         tmpl_lo = QVBoxLayout(tmpl_group)
-        self._tmpl_combo = QComboBox(); self._tmpl_combo.addItem("-- 选择模板 --")
-        for t in self._template_mgr.get_all_templates():
-            self._tmpl_combo.addItem(f"{t.category[:4]}: {t.template_name}", t.template_id)
-        self._tmpl_combo.currentIndexChanged.connect(self._on_template_selected)
-        self._tmpl_pinned: set[str] = set()  # pinned template IDs
-        tmpl_lo.addWidget(self._tmpl_combo)
+        self._tmpl_pinned: set[str] = set()
+        self._tmpl_combo = None  # replaced by preview button
+        tmpl_preview_btn = QPushButton("👁 选择模板样式")
+        tmpl_preview_btn.setStyleSheet(
+            "QPushButton { font-size: 12px; padding: 8px 12px; border: 1px solid #3498db; "
+            "border-radius: 4px; color: #3498db; background: #fff; font-weight: bold; }"
+            "QPushButton:hover { background: #3498db; color: #fff; }"
+        )
+        tmpl_preview_btn.clicked.connect(self._show_template_preview)
+        tmpl_lo.addWidget(tmpl_preview_btn)
         panel_layout.addWidget(tmpl_group)
 
         self._box_styles: list[dict] = []
-        self._box_pinned: set[str] = set()  # pinned box-style IDs
+        self._box_pinned: set[str] = set()
         box_group = _styled_group("框选识别的花字")
         box_lo = QVBoxLayout(box_group)
-        self._box_combo = QComboBox(); self._box_combo.addItem("-- 框选后自动出现在这里 --")
-        self._box_combo.currentIndexChanged.connect(self._on_box_style_selected)
-        box_lo.addWidget(self._box_combo)
+        self._box_combo = None
+        box_preview_btn = QPushButton("👁 选择框选样式")
+        box_preview_btn.setStyleSheet(
+            "QPushButton { font-size: 12px; padding: 8px 12px; border: 1px solid #e67e22; "
+            "border-radius: 4px; color: #e67e22; background: #fff; font-weight: bold; }"
+            "QPushButton:hover { background: #e67e22; color: #fff; }"
+        )
+        box_preview_btn.clicked.connect(self._show_box_preview)
+        box_lo.addWidget(box_preview_btn)
         panel_layout.addWidget(box_group)
 
-        # Right-click context menus for both combos
-        self._tmpl_combo.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self._tmpl_combo.customContextMenuRequested.connect(
-            lambda p: self._show_tmpl_context_menu(p))
-        self._box_combo.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self._box_combo.customContextMenuRequested.connect(
-            lambda p: self._show_box_context_menu(p))
+        # Context menus removed with combos — use preview dialog instead
 
         # ---------------------------------------------------------------
         # CONTENT
@@ -411,17 +416,15 @@ class GifEditorPage(QWidget):
         # Size + weight row
         f2_row = QHBoxLayout(); f2_row.setSpacing(4)
         f2_row.addWidget(QLabel("字号"))
-        self._font_size_spin = _spin(10, 300, 72, 68)
+        self._font_size_spin = _spin(10, 300, 72, 84)
         self._font_size_spin.valueChanged.connect(self._on_style_changed)
         f2_row.addWidget(self._font_size_spin)
         f2_row.addSpacing(4)
         f2_row.addWidget(QLabel("字重"))
-        self._weight_combo = QComboBox()
-        self._weight_combo.addItems(["细 300", "常 400", "中 500", "半粗 600", "粗 700", "重 900"])
-        self._weight_combo.setCurrentIndex(4)
-        self._weight_combo.currentIndexChanged.connect(self._on_weight_changed)
-        self._weight_combo.setFixedWidth(70)
-        f2_row.addWidget(self._weight_combo)
+        self._weight_spin = _spin(100, 9999, 700, 82)
+        self._weight_spin.setSingleStep(100)
+        self._weight_spin.valueChanged.connect(self._on_weight_changed)
+        f2_row.addWidget(self._weight_spin)
         f2_row.addStretch()
         f_lo.addLayout(f2_row)
 
@@ -451,10 +454,10 @@ class GifEditorPage(QWidget):
 
         # Spacing & alignment
         f3_row = QHBoxLayout(); f3_row.setSpacing(6)
-        f3_row.addWidget(QLabel("字距")); self._letter_spin = _spin(-10, 50, 0, 62)
+        f3_row.addWidget(QLabel("字距")); self._letter_spin = _spin(-10, 50, 0, 78)
         self._letter_spin.valueChanged.connect(self._on_style_changed); f3_row.addWidget(self._letter_spin)
         f3_row.addSpacing(6)
-        f3_row.addWidget(QLabel("行距")); self._line_spin = _spin(0, 100, 8, 62)
+        f3_row.addWidget(QLabel("行距")); self._line_spin = _spin(0, 100, 8, 78)
         self._line_spin.valueChanged.connect(self._on_style_changed); f3_row.addWidget(self._line_spin)
         f3_row.addStretch()
         f_lo.addLayout(f3_row)
@@ -503,6 +506,25 @@ class GifEditorPage(QWidget):
         self._grad_end_btn.clicked.connect(lambda: self._pick_color("gradient_end"))
         gc_row.addWidget(self._grad_end_btn)
         grad_lo.addLayout(gc_row)
+        # Mid color
+        gmidc_row = QHBoxLayout(); gmidc_row.setSpacing(6)
+        gmidc_row.addWidget(QLabel("中间"))
+        self._grad_mid_btn = _color_btn("", 48)
+        self._grad_mid_btn.clicked.connect(lambda: self._pick_color("gradient_mid"))
+        gmidc_row.addWidget(self._grad_mid_btn)
+        gmidc_row.addWidget(QLabel("(可选)"))
+        gmidc_row.addStretch()
+        grad_lo.addLayout(gmidc_row)
+
+        # Midpoint slider
+        gmid_row = QHBoxLayout(); gmid_row.setSpacing(4)
+        gmid_row.addWidget(QLabel("渐变范围"))
+        self._grad_midpoint_sl = QSlider(Qt.Orientation.Horizontal)
+        self._grad_midpoint_sl.setRange(0, 100)
+        self._grad_midpoint_sl.setValue(50)
+        self._grad_midpoint_sl.valueChanged.connect(self._on_style_changed)
+        gmid_row.addWidget(self._grad_midpoint_sl, 1)
+        grad_lo.addLayout(gmid_row)
 
         # Direction (for linear)
         self._grad_dir_row = QHBoxLayout(); self._grad_dir_row.setSpacing(4)
@@ -513,44 +535,32 @@ class GifEditorPage(QWidget):
         self._grad_dir_row.addWidget(self._grad_dir_combo, 1)
         grad_lo.addLayout(self._grad_dir_row)
 
-        # Preset gradients row 1
-        gpreset_row = QHBoxLayout(); gpreset_row.setSpacing(2)
-        for gname, gs, ge in [
-            ("金橙", "#FFD700", "#FF7A00"), ("火焰", "#FF0000", "#FFD700"),
-            ("霓虹", "#FF00FF", "#00FFFF"), ("海洋", "#0066FF", "#00FFCC"),
-            ("紫金", "#8B00FF", "#FFD700"), ("日落", "#FF6600", "#9900CC"),
-        ]:
+        # Preset gradients (3-stop)
+        PRESET_GRADIENTS: list[tuple[str, str, str, str]] = [
+            ("金橙高亮", "#FF9A00", "#FFC83D", "#FFF3A3"),
+            ("红金吸睛", "#D62828", "#F77F00", "#FFD166"),
+            ("蓝紫流光", "#3A0CA3", "#4361EE", "#4CC9F0"),
+            ("玫红橙亮", "#FF006E", "#FB5607", "#FFBE0B"),
+            ("青蓝高亮", "#00C2FF", "#00E5FF", "#A0F8FF"),
+            ("紫粉高亮", "#7B2CBF", "#C77DFF", "#FFD6FF"),
+            ("黄白高亮", "#F4B400", "#FFD84D", "#FFF6BF"),
+            ("绿色活力", "#00B894", "#00CEC9", "#81ECEC"),
+            ("橙红爆款", "#FF512F", "#F09819", "#FFE259"),
+            ("蓝白清爽", "#007CF0", "#00DFD8", "#FFFFFF"),
+        ]
+        gpreset_grid = QGridLayout(); gpreset_grid.setSpacing(2)
+        for i, (gname, gs, gm, ge) in enumerate(PRESET_GRADIENTS):
             btn = QPushButton(gname)
-            btn.setFixedSize(36, 18)
+            btn.setFixedSize(42, 20)
             btn.setStyleSheet(
                 f"QPushButton {{ font-size: 9px; padding: 0; border: 1px solid #dcdde1; "
                 f"border-radius: 2px; background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
-                f"stop:0 {gs}, stop:1 {ge}); color: #fff; text-shadow: 0 0 2px #000; }}"
+                f"stop:0 {gs}, stop:0.5 {gm}, stop:1 {ge}); color: #fff; text-shadow: 0 0 2px #000; }}"
                 f"QPushButton:hover {{ border: 2px solid #3498db; }}"
             )
-            btn.clicked.connect(lambda checked, s=gs, e=ge: self._apply_gradient_preset(s, e))
-            gpreset_row.addWidget(btn)
-        gpreset_row.addStretch()
-        grad_lo.addLayout(gpreset_row)
-        # Preset gradients row 2
-        gpreset_row2 = QHBoxLayout(); gpreset_row2.setSpacing(2)
-        for gname, gs, ge in [
-            ("玫瑰金", "#FF6B9D", "#C44569"), ("翡翠", "#00FF88", "#006644"),
-            ("极光", "#00FFCC", "#0066FF"), ("琥珀", "#FFB347", "#FF7A00"),
-            ("紫夜", "#2D0050", "#FF00FF"), ("星空", "#0F0C29", "#302B63"),
-        ]:
-            btn = QPushButton(gname)
-            btn.setFixedSize(36, 18)
-            btn.setStyleSheet(
-                f"QPushButton {{ font-size: 9px; padding: 0; border: 1px solid #dcdde1; "
-                f"border-radius: 2px; background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
-                f"stop:0 {gs}, stop:1 {ge}); color: #fff; text-shadow: 0 0 2px #000; }}"
-                f"QPushButton:hover {{ border: 2px solid #3498db; }}"
-            )
-            btn.clicked.connect(lambda checked, s=gs, e=ge: self._apply_gradient_preset(s, e))
-            gpreset_row2.addWidget(btn)
-        gpreset_row2.addStretch()
-        grad_lo.addLayout(gpreset_row2)
+            btn.clicked.connect(lambda checked, s=gs, m=gm, e=ge: self._apply_gradient_preset(s, m, e))
+            gpreset_grid.addWidget(btn, i // 5, i % 5)
+        grad_lo.addLayout(gpreset_grid)
 
         panel_layout.addWidget(grad_group)
 
@@ -570,11 +580,21 @@ class GifEditorPage(QWidget):
         self._stroke_color_btn.clicked.connect(lambda: self._pick_color("stroke"))
         s_color_row.addWidget(self._stroke_color_btn)
         s_color_row.addSpacing(6)
-        s_color_row.addWidget(QLabel("粗细")); self._stroke_width_spin = _spin(0, 30, 8, 60)
+        s_color_row.addWidget(QLabel("粗细")); self._stroke_width_spin = _spin(0, 30, 8, 74)
         self._stroke_width_spin.valueChanged.connect(self._on_style_changed)
         s_color_row.addWidget(self._stroke_width_spin); s_color_row.addWidget(QLabel("px"))
         s_color_row.addStretch()
         s_lo.addLayout(s_color_row)
+
+        # Stroke opacity
+        sop_row = QHBoxLayout(); sop_row.setSpacing(6)
+        sop_row.addWidget(QLabel("不透明度"))
+        self._stroke_opacity_sl = QSlider(Qt.Orientation.Horizontal)
+        self._stroke_opacity_sl.setRange(5, 100)
+        self._stroke_opacity_sl.setValue(100)
+        self._stroke_opacity_sl.valueChanged.connect(self._on_style_changed)
+        sop_row.addWidget(self._stroke_opacity_sl, 1)
+        s_lo.addLayout(sop_row)
         panel_layout.addWidget(stroke_group)
 
         # ---------------------------------------------------------------
@@ -596,13 +616,13 @@ class GifEditorPage(QWidget):
         sh_c_row.addWidget(self._shadow_opacity_sl, 1)
         sh_lo.addLayout(sh_c_row)
         sh_off_row = QHBoxLayout(); sh_off_row.setSpacing(4)
-        sh_off_row.addWidget(QLabel("X")); self._shadow_x_spin = _spin(-50, 50, 3, 58)
+        sh_off_row.addWidget(QLabel("X")); self._shadow_x_spin = _spin(-50, 50, 3, 70)
         self._shadow_x_spin.valueChanged.connect(self._on_style_changed); sh_off_row.addWidget(self._shadow_x_spin)
         sh_off_row.addSpacing(2)
-        sh_off_row.addWidget(QLabel("Y")); self._shadow_y_spin = _spin(-50, 50, 3, 58)
+        sh_off_row.addWidget(QLabel("Y")); self._shadow_y_spin = _spin(-50, 50, 3, 70)
         self._shadow_y_spin.valueChanged.connect(self._on_style_changed); sh_off_row.addWidget(self._shadow_y_spin)
         sh_off_row.addSpacing(2)
-        sh_off_row.addWidget(QLabel("模糊")); self._shadow_blur_spin = _spin(0, 50, 4, 58)
+        sh_off_row.addWidget(QLabel("模糊")); self._shadow_blur_spin = _spin(0, 50, 4, 70)
         self._shadow_blur_spin.valueChanged.connect(self._on_style_changed); sh_off_row.addWidget(self._shadow_blur_spin)
         sh_off_row.addStretch()
         sh_lo.addLayout(sh_off_row)
@@ -627,10 +647,10 @@ class GifEditorPage(QWidget):
         bg_c_row.addWidget(self._bg_opacity_sl, 1)
         bg_lo.addLayout(bg_c_row)
         bg_p_row = QHBoxLayout(); bg_p_row.setSpacing(4)
-        bg_p_row.addWidget(QLabel("圆角")); self._bg_radius_spin = _spin(0, 40, 12, 58)
+        bg_p_row.addWidget(QLabel("圆角")); self._bg_radius_spin = _spin(0, 40, 12, 70)
         self._bg_radius_spin.valueChanged.connect(self._on_style_changed); bg_p_row.addWidget(self._bg_radius_spin)
         bg_p_row.addSpacing(2)
-        bg_p_row.addWidget(QLabel("内距")); self._bg_padding_spin = _spin(0, 40, 12, 58)
+        bg_p_row.addWidget(QLabel("内距")); self._bg_padding_spin = _spin(0, 40, 12, 70)
         self._bg_padding_spin.valueChanged.connect(self._on_style_changed); bg_p_row.addWidget(self._bg_padding_spin)
         bg_p_row.addStretch()
         bg_lo.addLayout(bg_p_row)
@@ -650,7 +670,7 @@ class GifEditorPage(QWidget):
         self._border_color_btn.clicked.connect(lambda: self._pick_color("border"))
         bd_c_row.addWidget(self._border_color_btn)
         bd_c_row.addSpacing(6)
-        bd_c_row.addWidget(QLabel("粗细")); self._border_width_spin = _spin(1, 10, 2, 56)
+        bd_c_row.addWidget(QLabel("粗细")); self._border_width_spin = _spin(1, 10, 2, 70)
         self._border_width_spin.valueChanged.connect(self._on_style_changed)
         bd_c_row.addWidget(self._border_width_spin)
         bd_c_row.addSpacing(6)
@@ -821,6 +841,7 @@ class GifEditorPage(QWidget):
             ("fill_color", "#FFD700"), ("opacity", 1.0),
             ("letter_spacing", 0), ("line_spacing", 8), ("align", "center"),
             ("stroke_enabled", True), ("stroke_color", "#000000"), ("stroke_width", 8),
+            ("stroke_opacity", 1.0),
             ("shadow_enabled", True), ("shadow_color", "#000000"), ("shadow_opacity", 0.5),
             ("shadow_offset_x", 3), ("shadow_offset_y", 3), ("shadow_blur", 4),
             ("gradient_enabled", False), ("gradient_start", "#FFFFFF"), ("gradient_end", "#FFD700"),
@@ -1065,108 +1086,16 @@ class GifEditorPage(QWidget):
         QApplication.clipboard().setText(text)
 
     def _show_tmpl_context_menu(self, pos):
-        from PySide6.QtWidgets import QMenu, QInputDialog
-        idx = self._tmpl_combo.currentIndex()
-        tid = self._tmpl_combo.currentData()
-        if idx <= 0 or not tid:
-            return
-        menu = QMenu(self)
-        is_pinned = tid in self._tmpl_pinned
-        pin_action = menu.addAction("📌 取消置顶" if is_pinned else "📌 置顶")
-        rename_action = menu.addAction("✏ 重命名")
-        delete_action = menu.addAction("🗑 删除")
-        action = menu.exec(self._tmpl_combo.mapToGlobal(pos))
-        if action == pin_action:
-            if is_pinned:
-                self._tmpl_pinned.discard(tid)
-            else:
-                self._tmpl_pinned.add(tid)
-            self._refresh_template_combo()
-        elif action == rename_action:
-            tmpl = self._template_mgr.get_template(tid)
-            if tmpl:
-                name, ok = QInputDialog.getText(self, "重命名模板", "新名称：", text=tmpl.template_name)
-                if ok and name.strip():
-                    tmpl.template_name = name.strip()
-                    tmpl.style["template_name"] = name.strip()
-                    self._template_mgr.save_custom_template(tid, name.strip(), tmpl.category, tmpl.style)
-                    self._refresh_template_combo()
-        elif action == delete_action:
-            from PySide6.QtWidgets import QMessageBox
-            if QMessageBox.question(self, "删除模板", "确定删除此模板？") == QMessageBox.StandardButton.Yes:
-                self._template_mgr.delete_custom_template(tid)
-                self._tmpl_pinned.discard(tid)
-                self._refresh_template_combo()
+        pass  # Combos removed; manage via preview dialog
 
     def _show_box_context_menu(self, pos):
-        from PySide6.QtWidgets import QMenu, QInputDialog, QMessageBox
-        idx = self._box_combo.currentIndex()
-        if idx <= 0 or idx - 1 >= len(self._box_styles):
-            return
-        style_ref = self._box_styles[idx - 1]
-        sid = style_ref["style_id"]
-        menu = QMenu(self)
-        is_pinned = sid in self._box_pinned
-        pin_action = menu.addAction("📌 取消置顶" if is_pinned else "📌 置顶")
-        rename_action = menu.addAction("✏ 重命名")
-        delete_action = menu.addAction("🗑 删除")
-        action = menu.exec(self._box_combo.mapToGlobal(pos))
-        if action == pin_action:
-            if is_pinned:
-                self._box_pinned.discard(sid)
-            else:
-                self._box_pinned.add(sid)
-            self._refresh_box_combo()
-        elif action == rename_action:
-            name, ok = QInputDialog.getText(self, "重命名", "新名称：", text=style_ref["name"])
-            if ok and name.strip():
-                style_ref["name"] = name.strip()
-                self._refresh_box_combo()
-        elif action == delete_action:
-            if QMessageBox.question(self, "删除", "确定删除此框选样式？") == QMessageBox.StandardButton.Yes:
-                self._box_styles.pop(idx - 1)
-                self._box_pinned.discard(sid)
-                self._refresh_box_combo()
+        pass  # Combos removed; manage via preview dialog
 
     def _refresh_template_combo(self):
-        """Rebuild the template dropdown with pinned items first."""
-        self._tmpl_combo.blockSignals(True)
-        self._tmpl_combo.clear()
-        self._tmpl_combo.addItem("-- 选择模板 --")
-        all_tmpl = self._template_mgr.get_all_templates()
-        pinned = [t for t in all_tmpl if t.template_id in self._tmpl_pinned]
-        unpinned = [t for t in all_tmpl if t.template_id not in self._tmpl_pinned]
-        if pinned:
-            self._tmpl_combo.addItem("--- 📌 置顶 ---")
-        for t in pinned:
-            self._tmpl_combo.addItem(f"📌 {t.category[:4]}: {t.template_name}", t.template_id)
-        if pinned:
-            self._tmpl_combo.addItem("--- 其他 ---")
-        for t in unpinned:
-            self._tmpl_combo.addItem(f"{t.category[:4]}: {t.template_name}", t.template_id)
-        self._tmpl_combo.setCurrentIndex(0)
-        self._tmpl_combo.blockSignals(False)
+        """No-op: combo removed, preview dialog is now the sole selector."""
 
     def _refresh_box_combo(self):
-        """Rebuild the box-select dropdown with pinned items first."""
-        self._box_combo.blockSignals(True)
-        self._box_combo.clear()
-        if self._box_styles:
-            pinned = [s for s in self._box_styles if s["style_id"] in self._box_pinned]
-            unpinned = [s for s in self._box_styles if s["style_id"] not in self._box_pinned]
-            self._box_combo.addItem(f"-- 框选样式 ({len(self._box_styles)}个) --")
-            if pinned:
-                self._box_combo.addItem("--- 📌 置顶 ---")
-            for s in pinned:
-                self._box_combo.addItem(f"📌 {s['name']}", s["style_id"])
-            if pinned:
-                self._box_combo.addItem("--- 其他 ---")
-            for s in unpinned:
-                self._box_combo.addItem(s["name"], s["style_id"])
-        else:
-            self._box_combo.addItem("-- 框选后自动出现在这里 --")
-        self._box_combo.setCurrentIndex(0)
-        self._box_combo.blockSignals(False)
+        """No-op: combo removed, preview dialog is now the sole selector."""
 
     def _on_box_style_selected(self, idx: int):
         """Load and apply a saved box-select style JSON."""
@@ -1180,6 +1109,65 @@ class GifEditorPage(QWidget):
             self.apply_template({"style": style_to_text_layer(style_dict)})
         except Exception as e:
             logger.error(f"Failed to load box style {json_path}: {e}")
+
+    def _show_template_preview(self):
+        """Open style preview dialog for all templates."""
+        styles = []
+        for t in self._template_mgr.get_all_templates():
+            styles.append({
+                "id": t.template_id,
+                "name": t.template_name,
+                "style_params": {**t.style, "_preview_text": "Aa"},
+            })
+        if styles:
+            dlg = StylePreviewDialog(styles, "", self)
+            dlg.style_selected.connect(self._on_preview_style_applied)
+            dlg.exec()
+
+    def _show_box_preview(self):
+        """Open style preview dialog for all box-select styles."""
+        styles = []
+        for s in self._box_styles:
+            style_dict = None
+            json_path = s.get("json_path", "")
+            if json_path and os.path.isfile(json_path):
+                try:
+                    with open(json_path, "r", encoding="utf-8") as f:
+                        style_dict = json.load(f)
+                except Exception:
+                    pass
+            if style_dict:
+                params = style_to_text_layer(style_dict)
+                params["_preview_text"] = "Aa"
+                styles.append({
+                    "id": s["style_id"],
+                    "name": s["name"],
+                    "style_params": params,
+                })
+        if styles:
+            dlg = StylePreviewDialog(styles, "", self)
+            dlg.style_selected.connect(self._on_preview_style_applied)
+            dlg.exec()
+
+    def _on_preview_style_applied(self, style_id: str):
+        """Called when a style is selected in the preview dialog."""
+        # Try template first
+        tmpl = self._template_mgr.get_template(style_id)
+        if tmpl:
+            self.apply_template(tmpl.style)
+            return
+        # Try box-style
+        for s in self._box_styles:
+            if s["style_id"] == style_id:
+                json_path = s.get("json_path", "")
+                if json_path and os.path.isfile(json_path):
+                    try:
+                        with open(json_path, "r", encoding="utf-8") as f:
+                            style_dict = json.load(f)
+                        self.apply_template({"style": style_to_text_layer(style_dict)})
+                    except Exception:
+                        pass
+                return
 
     def _reset_gif_position(self):
         self._gif_x_spin.setValue(0)
@@ -1200,15 +1188,14 @@ class GifEditorPage(QWidget):
         tl = self._text_layer
         self._font_btn.setText(tl.font_family)
         self._font_size_spin.setValue(tl.font_size)
-        # Weight combo
-        weight_map = {300: 0, 400: 1, 500: 2, 600: 3, 700: 4, 900: 5}
-        self._weight_combo.setCurrentIndex(weight_map.get(tl.weight, 4))
+        self._weight_spin.setValue(tl.weight)
         self._letter_spin.setValue(tl.letter_spacing)
         self._line_spin.setValue(tl.line_spacing)
         for ak, btn in self._align_btns.items():
             btn.setChecked(ak == tl.align)
         # Gradient
         self._grad_cb.setChecked(tl.gradient_enabled)
+        self._grad_midpoint_sl.setValue(int(tl.gradient_midpoint * 100))
         self._grad_type_combo.setCurrentIndex(1 if tl.gradient_type == "radial" else 0)
         gd_map = {"topToBottom": 0, "leftToRight": 1, "leftTopToRightBot": 2, "rightTopToLeftBot": 3}
         self._grad_dir_combo.setCurrentIndex(gd_map.get(tl.gradient_direction, 0))
@@ -1218,6 +1205,7 @@ class GifEditorPage(QWidget):
             if w: w.setVisible(tl.gradient_type != "radial")
         self._stroke_cb.setChecked(tl.stroke_enabled)
         self._stroke_width_spin.setValue(tl.stroke_width)
+        self._stroke_opacity_sl.setValue(int(tl.stroke_opacity * 100))
         self._shadow_cb.setChecked(tl.shadow_enabled)
         self._shadow_opacity_sl.setValue(int(tl.shadow_opacity * 100))
         self._shadow_x_spin.setValue(tl.shadow_offset_x)
@@ -1273,8 +1261,10 @@ class GifEditorPage(QWidget):
         self._text_layer.letter_spacing = self._letter_spin.value()
         self._text_layer.line_spacing = self._line_spin.value()
         self._text_layer.gradient_enabled = self._grad_cb.isChecked()
+        self._text_layer.gradient_midpoint = self._grad_midpoint_sl.value() / 100.0
         self._text_layer.stroke_enabled = self._stroke_cb.isChecked()
         self._text_layer.stroke_width = self._stroke_width_spin.value()
+        self._text_layer.stroke_opacity = self._stroke_opacity_sl.value() / 100.0
         self._text_layer.shadow_enabled = self._shadow_cb.isChecked()
         self._text_layer.shadow_opacity = self._shadow_opacity_sl.value() / 100.0
         self._text_layer.shadow_offset_x = self._shadow_x_spin.value()
@@ -1289,10 +1279,9 @@ class GifEditorPage(QWidget):
         self._text_layer.border_opacity = self._border_opacity_sl.value() / 100.0
         self._render_preview()
 
-    def _on_weight_changed(self, idx: int):
-        weight_map = {0: 300, 1: 400, 2: 500, 3: 600, 4: 700, 5: 900}
-        self._text_layer.weight = weight_map.get(idx, 700)
-        self._text_layer.bold = self._text_layer.weight >= 600
+    def _on_weight_changed(self, val: int):
+        self._text_layer.weight = val
+        self._text_layer.bold = val >= 600
         self._render_preview()
 
     def _on_grad_dir_changed(self, idx: int):
@@ -1308,9 +1297,10 @@ class GifEditorPage(QWidget):
             if w: w.setVisible(idx == 0)
         self._render_preview()
 
-    def _apply_gradient_preset(self, start: str, end: str):
+    def _apply_gradient_preset(self, start: str, mid: str, end: str):
         self._text_layer.gradient_enabled = True
         self._text_layer.gradient_start = start
+        self._text_layer.gradient_mid = mid
         self._text_layer.gradient_end = end
         self._grad_cb.setChecked(True)
         self._sync_ui_from_layer()
@@ -1376,6 +1366,8 @@ class GifEditorPage(QWidget):
 
     def _apply_palette_color(self, color: str, dlg: QDialog):
         self._text_layer.fill_color = color
+        if self._text_layer.gradient_enabled:
+            self._text_layer.gradient_start = color
         self._update_color_buttons()
         self._render_preview()
         dlg.accept()
@@ -1461,6 +1453,7 @@ class GifEditorPage(QWidget):
         "background": ("background_color", "_bg_color_btn"),
         "border": ("border_color", "_border_color_btn"),
         "gradient_start": ("gradient_start", "_grad_start_btn"),
+        "gradient_mid": ("gradient_mid", "_grad_mid_btn"),
         "gradient_end": ("gradient_end", "_grad_end_btn"),
     }
 
@@ -1472,6 +1465,10 @@ class GifEditorPage(QWidget):
         color = QColorDialog.getColor(current, self, "选择颜色")
         if color.isValid():
             setattr(self._text_layer, attr, color.name())
+            # If picking fill color while gradient is on, sync gradient_start
+            # so the change is visible immediately
+            if target == "fill" and self._text_layer.gradient_enabled:
+                self._text_layer.gradient_start = color.name()
             self._update_color_buttons()
             self._render_preview()
 
@@ -1503,15 +1500,7 @@ class GifEditorPage(QWidget):
             self._text_item.set_locked(locked)
 
     def _on_template_selected(self, idx: int):
-        if idx <= 0:
-            return
-        tid = self._tmpl_combo.currentData()
-        tmpl = self._template_mgr.get_template(tid)
-        if tmpl:
-            self.apply_template(tmpl.style)
-            self._tmpl_combo.blockSignals(True)
-            self._tmpl_combo.setCurrentIndex(0)
-            self._tmpl_combo.blockSignals(False)
+        pass  # Combos removed; preview dialog handles selection
 
     def _add_text(self):
         if not self._decoder:

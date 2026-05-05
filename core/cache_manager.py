@@ -1,7 +1,7 @@
 import os
 import shutil
 
-from utils.path_utils import resolve_path, ensure_dir
+from utils.path_utils import resolve_data_path, ensure_dir
 from utils.logger import get_logger
 
 logger = get_logger()
@@ -9,9 +9,9 @@ logger = get_logger()
 
 class CacheManager:
     def __init__(self):
-        self._render_frames_dir = resolve_path("cache", "render_frames")
-        self._audio_temp_dir = resolve_path("cache", "audio_temp")
-        self._video_temp_dir = resolve_path("cache", "video_temp")
+        self._render_frames_dir = resolve_data_path("cache", "render_frames")
+        self._audio_temp_dir = resolve_data_path("cache", "audio_temp")
+        self._video_temp_dir = resolve_data_path("cache", "video_temp")
 
     def ensure_render_dir(self, safe_filename: str) -> str:
         path = os.path.join(self._render_frames_dir, safe_filename)

@@ -1,12 +1,22 @@
 import sys
 import os
+import ctypes
 
+# Windows taskbar icon fix — must be before Qt import
+if sys.platform == "win32":
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("RegionBatchVideoTool")
+
+# High DPI — must be set before any Qt import
 os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
+os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "0"
+os.environ["QT_SCALE_FACTOR_ROUNDING_POLICY"] = "PassThrough"
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QIcon
 
 from utils.logger import setup_logging
+from utils.path_utils import resolve_path
 from core.file_manager import init_app_dirs
 from ui.main_window import MainWindow
 
@@ -15,11 +25,27 @@ def main():
     setup_logging()
     init_app_dirs()
 
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
+    # Qt 6 high DPI — AA_EnableHighDpiScaling is deprecated (always on in Qt 6)
+    # PassThrough keeps fractional scaling exact (no blur from rounding)
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
     app = QApplication(sys.argv)
     app.setApplicationName("矩量拓客：地区视频批量生成")
 
-    # Global checkbox style — enlarge indicator without breaking native checkmark
+    # App icon (taskbar + window)
+    import os as _os
+    icon_path = resolve_path("assets", "icon.ico")
+    if _os.path.isfile(icon_path):
+        app_icon = QIcon(icon_path)
+        app.setWindowIcon(app_icon)
+
+    # System font for consistent rendering across DPI scales
+    font = QFont("Microsoft YaHei", 9)
+    font.setHintingPreference(QFont.HintingPreference.PreferFullHinting)
+    app.setFont(font)
+
+    # Global checkbox style
     app.setStyleSheet("""
         QCheckBox {
             font-size: 13px;
@@ -40,31 +66,6 @@ def main():
     window.show()
 
     sys.exit(app.exec())
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
 
 
 if __name__ == "__main__":

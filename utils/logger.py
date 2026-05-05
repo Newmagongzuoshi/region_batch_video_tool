@@ -2,7 +2,7 @@ import logging
 import os
 from datetime import datetime
 
-from utils.path_utils import resolve_path, ensure_dir
+from utils.path_utils import resolve_data_path, ensure_dir
 
 _logger: logging.Logger | None = None
 
@@ -11,7 +11,7 @@ def setup_logging(log_dir: str | None = None) -> logging.Logger:
     global _logger
 
     if log_dir is None:
-        log_dir = resolve_path("logs")
+        log_dir = resolve_data_path("logs")
     ensure_dir(log_dir)
 
     logger = logging.getLogger("region_batch_video_tool")

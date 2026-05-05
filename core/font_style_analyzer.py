@@ -211,8 +211,8 @@ def analyze_text_style(image: Image.Image,
                         next_frontier.append(np)
         frontier = next_frontier
 
-    # ---- Separate stroke vs body by distance; use distance-weighted fill detection ----
-    body_threshold = max(2, min(4, (max_x - min_x) // 12, (max_y - min_y) // 12))
+    # ---- Separate stroke vs body by distance ----
+    body_threshold = max(3, min(5, (max_x - min_x) // 8, (max_y - min_y) // 8))
     stroke_pos: list[tuple[int, int]] = []
     body_pos: list[tuple[int, int]] = []
 
@@ -223,19 +223,47 @@ def analyze_text_style(image: Image.Image,
         else:
             body_pos.append((px, py))
 
-    # ---- fill color: use body pixels (deep interior), fallback weighted all opaque ----
+    # ---- Detect stroke color first from boundary pixels ----
+    outline_enabled = False
+    outline_rgb = (0, 0, 0)
+    outline_width = 0
+    dist_threshold = 40 if is_solid_bg else 30
+    stroke_dominant = (0, 0, 0)
+
+    if stroke_pos and len(stroke_pos) >= 4:
+        stroke_colors = [pixels[px, py][:3] for px, py in stroke_pos]
+        stroke_counter = Counter(stroke_colors)
+        stroke_dominant = stroke_counter.most_common(1)[0][0]
+        if body_pos:
+            ratio = len(stroke_pos) / max(1, len(stroke_pos) + len(body_pos))
+            outline_width = max(2, min(12, round(ratio * 20)))
+
+    # ---- Fill color: cluster body pixels, exclude stroke-like colors ----
     if body_pos:
-        # Body pixels = deep interior, most representative of fill color
         body_colors = [pixels[px, py][:3] for px, py in body_pos]
-        fill_counter = Counter(body_colors)
-        fill_rgb = fill_counter.most_common(1)[0][0]
+        clusters = _cluster_colors(body_colors, k=2)
+        if len(clusters) >= 2:
+            c0, c1 = clusters[0], clusters[1]
+            d0 = _color_distance(c0, stroke_dominant)
+            d1 = _color_distance(c1, stroke_dominant)
+            fill_rgb = c0 if d0 > d1 else c1
+            # Verify fill really differs from stroke
+            if _color_distance(fill_rgb, stroke_dominant) < 25:
+                outline_enabled = False
+                fill_rgb = Counter(body_colors).most_common(1)[0][0]
+            elif d0 > dist_threshold or d1 > dist_threshold:
+                outline_enabled = True
+                outline_rgb = stroke_dominant
+        elif len(clusters) == 1:
+            fill_rgb = clusters[0]
+        else:
+            fill_rgb = Counter(body_colors).most_common(1)[0][0]
     elif opaque_pos:
-        # No body pixels (very thin text or thick stroke) — distance-weighted voting
         weighted: dict[tuple, float] = {}
         for px, py in opaque_pos:
             c = pixels[px, py][:3]
             d = dist.get((px, py), 1)
-            w = d * d  # square distance weight (far pixels dominate)
+            w = d * d
             weighted[c] = weighted.get(c, 0.0) + w
         fill_rgb = max(weighted, key=weighted.get) if weighted else (255, 255, 255)
     elif aa_edge_rgb:
@@ -244,26 +272,8 @@ def analyze_text_style(image: Image.Image,
     else:
         fill_rgb = (255, 255, 255)
 
-    # ---- outline (stroke) detection ----
-    outline_enabled = False
-    outline_rgb = (0, 0, 0)
-    outline_width = 0
-
-    # Higher thresholds for solid backgrounds (anti-aliasing creates false edges)
-    dist_threshold = 40 if is_solid_bg else 30
-
-    if stroke_pos and body_pos and len(stroke_pos) >= 4:
-        stroke_colors = [pixels[px, py][:3] for px, py in stroke_pos]
-        stroke_counter = Counter(stroke_colors)
-        # Find a stroke color that clearly differs from fill
-        candidates = [(c, n) for c, n in stroke_counter.most_common(5)
-                      if _color_distance(c, fill_rgb) > dist_threshold]
-        if candidates:
-            outline_enabled = True
-            outline_rgb = candidates[0][0]
-            ratio = len(stroke_pos) / max(1, len(stroke_pos) + len(body_pos))
-            outline_width = max(2, min(12, round(ratio * 20)))
-    elif aa_edge_rgb and len(aa_edge_rgb) >= 4:
+    # ---- AA edge fallback ----
+    if not outline_enabled and aa_edge_rgb and len(aa_edge_rgb) >= 4:
         # Fallback: check anti-aliased edge
         aa_counter = Counter(aa_edge_rgb)
         candidates = [(c, n) for c, n in aa_counter.most_common(5)

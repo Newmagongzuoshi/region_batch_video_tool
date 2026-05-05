@@ -8,7 +8,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
-from utils.path_utils import resolve_path, ensure_dir
+from utils.path_utils import resolve_path, resolve_data_path
 from utils.logger import get_logger
 
 logger = get_logger()
@@ -300,7 +300,7 @@ class FontManager:
     # ---- recent ----
 
     def _recent_path(self) -> str:
-        return resolve_path("config", "recent_fonts.json")
+        return resolve_data_path("config", "recent_fonts.json")
 
     def _load_recent(self):
         path = self._recent_path()
@@ -317,7 +317,7 @@ class FontManager:
 
     def _save_recent(self):
         path = self._recent_path()
-        ensure_dir(os.path.dirname(path))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         try:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump({"recent": self._recent}, f, ensure_ascii=False, indent=2)
