@@ -21,7 +21,10 @@ MODEL_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
 class PiperTTSEngine(BaseTTSEngine):
     """Piper TTS — fully local neural TTS, no internet needed after model download."""
 
-    def __init__(self, ffmpeg_path: str = "ffmpeg", model_dir: str = "cache/piper_models"):
+    def __init__(self, ffmpeg_path: str = "ffmpeg", model_dir: str | None = None):
+        if model_dir is None:
+            from utils.path_utils import resolve_data_path
+            model_dir = resolve_data_path("cache", "piper_models")
         self._ffmpeg = ffmpeg_path
         self._model_dir = model_dir
         self._voice_id = "zh_CN-huayan-medium"

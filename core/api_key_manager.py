@@ -2,7 +2,7 @@ import json
 import os
 
 from utils.crypto_utils import encrypt_value, decrypt_value, mask_api_key
-from utils.path_utils import resolve_path, ensure_dir
+from utils.path_utils import resolve_data_path, ensure_dir
 from utils.logger import get_logger
 
 logger = get_logger()
@@ -16,7 +16,7 @@ class ApiKeyManager:
         self._load()
 
     def _config_path(self) -> str:
-        return resolve_path("config", CONFIG_FILE)
+        return resolve_data_path("config", CONFIG_FILE)
 
     def _load(self):
         path = self._config_path()

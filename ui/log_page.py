@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from core.task_store import TaskStore
-from utils.path_utils import resolve_path
+from utils.path_utils import resolve_data_path
 from utils.logger import get_logger
 
 logger = get_logger()
@@ -120,7 +120,7 @@ class LogPage(QWidget):
 
     def _open_log_file(self):
         import subprocess, sys
-        log_path = resolve_path("logs", "app.log")
+        log_path = resolve_data_path("logs", "app.log")
         if sys.platform == "win32":
             os.startfile(log_path)
         else:
