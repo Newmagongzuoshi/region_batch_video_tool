@@ -269,6 +269,12 @@ class GifEditorPage(QWidget):
             "QGroupBox { font-weight: bold; color: #2c3e50; border: 1px solid #dcdde1; "
             "border-radius: 6px; margin-top: 8px; padding-top: 16px; background: #fff; }"
             "QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 6px; color: #2c3e50; }"
+            "QGroupBox QLabel { color: #2c3e50; }"
+            "QGroupBox QCheckBox { color: #2c3e50; }"
+            "QGroupBox QComboBox { color: #2c3e50; }"
+            "QGroupBox QSpinBox { color: #2c3e50; }"
+            "QGroupBox QDoubleSpinBox { color: #2c3e50; }"
+            "QGroupBox QSlider { color: #2c3e50; }"
         )
 
         scroll = QScrollArea()
@@ -310,6 +316,11 @@ class GifEditorPage(QWidget):
             sl.setRange(min_v, max_v)
             sl.setValue(val)
             return sl
+
+        def _styled_label(text: str) -> QLabel:
+            lbl = QLabel(text)
+            lbl.setStyleSheet("QLabel { color: #2c3e50; font-size: 11px; }")
+            return lbl
 
         # ---------------------------------------------------------------
         # PRESETS
@@ -402,7 +413,7 @@ class GifEditorPage(QWidget):
 
         # Font picker button (replaces QComboBox)
         ff_row = QHBoxLayout(); ff_row.setSpacing(6)
-        ff_row.addWidget(QLabel("字体"))
+        ff_row.addWidget(_styled_label("字体"))
         self._font_btn = QPushButton(self._text_layer.font_family)
         self._font_btn.setStyleSheet(
             "QPushButton { text-align: left; padding: 4px 8px; border: 1px solid #dcdde1; "
@@ -415,12 +426,12 @@ class GifEditorPage(QWidget):
 
         # Size + weight row
         f2_row = QHBoxLayout(); f2_row.setSpacing(4)
-        f2_row.addWidget(QLabel("字号"))
+        f2_row.addWidget(_styled_label("字号"))
         self._font_size_spin = _spin(10, 300, 72, 84)
         self._font_size_spin.valueChanged.connect(self._on_style_changed)
         f2_row.addWidget(self._font_size_spin)
         f2_row.addSpacing(4)
-        f2_row.addWidget(QLabel("字重"))
+        f2_row.addWidget(_styled_label("字重"))
         self._weight_spin = _spin(100, 9999, 700, 82)
         self._weight_spin.setSingleStep(100)
         self._weight_spin.valueChanged.connect(self._on_weight_changed)
@@ -441,7 +452,7 @@ class GifEditorPage(QWidget):
 
         # Color row + palette quick picks
         fc_row = QHBoxLayout(); fc_row.setSpacing(6)
-        fc_row.addWidget(QLabel("颜色"))
+        fc_row.addWidget(_styled_label("颜色"))
         self._fill_color_btn = _color_btn(self._text_layer.fill_color, 52)
         self._fill_color_btn.clicked.connect(lambda: self._pick_color("fill"))
         fc_row.addWidget(self._fill_color_btn)
@@ -454,16 +465,16 @@ class GifEditorPage(QWidget):
 
         # Spacing & alignment
         f3_row = QHBoxLayout(); f3_row.setSpacing(6)
-        f3_row.addWidget(QLabel("字距")); self._letter_spin = _spin(-10, 50, 0, 78)
+        f3_row.addWidget(_styled_label("字距")); self._letter_spin = _spin(-10, 50, 0, 78)
         self._letter_spin.valueChanged.connect(self._on_style_changed); f3_row.addWidget(self._letter_spin)
         f3_row.addSpacing(6)
-        f3_row.addWidget(QLabel("行距")); self._line_spin = _spin(0, 100, 8, 78)
+        f3_row.addWidget(_styled_label("行距")); self._line_spin = _spin(0, 100, 8, 78)
         self._line_spin.valueChanged.connect(self._on_style_changed); f3_row.addWidget(self._line_spin)
         f3_row.addStretch()
         f_lo.addLayout(f3_row)
 
         align_row = QHBoxLayout(); align_row.setSpacing(4)
-        align_row.addWidget(QLabel("对齐"))
+        align_row.addWidget(_styled_label("对齐"))
         self._align_btns: dict[str, QPushButton] = {}
         for ak, al in [("left", "⬅左"), ("center", "■中"), ("right", "右➡")]:
             btn = QPushButton(al); btn.setCheckable(True)
@@ -488,7 +499,7 @@ class GifEditorPage(QWidget):
 
         # Type: linear / radial
         gt_row = QHBoxLayout(); gt_row.setSpacing(6)
-        gt_row.addWidget(QLabel("类型"))
+        gt_row.addWidget(_styled_label("类型"))
         self._grad_type_combo = QComboBox()
         self._grad_type_combo.addItems(["线性渐变", "径向渐变"])
         self._grad_type_combo.currentIndexChanged.connect(self._on_grad_type_changed)
@@ -497,28 +508,28 @@ class GifEditorPage(QWidget):
 
         # Start + End colors
         gc_row = QHBoxLayout(); gc_row.setSpacing(6)
-        gc_row.addWidget(QLabel("起始"))
+        gc_row.addWidget(_styled_label("起始"))
         self._grad_start_btn = _color_btn(self._text_layer.gradient_start, 48)
         self._grad_start_btn.clicked.connect(lambda: self._pick_color("gradient_start"))
         gc_row.addWidget(self._grad_start_btn)
-        gc_row.addWidget(QLabel("结束"))
+        gc_row.addWidget(_styled_label("结束"))
         self._grad_end_btn = _color_btn(self._text_layer.gradient_end, 48)
         self._grad_end_btn.clicked.connect(lambda: self._pick_color("gradient_end"))
         gc_row.addWidget(self._grad_end_btn)
         grad_lo.addLayout(gc_row)
         # Mid color
         gmidc_row = QHBoxLayout(); gmidc_row.setSpacing(6)
-        gmidc_row.addWidget(QLabel("中间"))
+        gmidc_row.addWidget(_styled_label("中间"))
         self._grad_mid_btn = _color_btn("", 48)
         self._grad_mid_btn.clicked.connect(lambda: self._pick_color("gradient_mid"))
         gmidc_row.addWidget(self._grad_mid_btn)
-        gmidc_row.addWidget(QLabel("(可选)"))
+        gmidc_row.addWidget(_styled_label("(可选)"))
         gmidc_row.addStretch()
         grad_lo.addLayout(gmidc_row)
 
         # Midpoint slider
         gmid_row = QHBoxLayout(); gmid_row.setSpacing(4)
-        gmid_row.addWidget(QLabel("渐变范围"))
+        gmid_row.addWidget(_styled_label("渐变范围"))
         self._grad_midpoint_sl = QSlider(Qt.Orientation.Horizontal)
         self._grad_midpoint_sl.setRange(0, 100)
         self._grad_midpoint_sl.setValue(50)
@@ -528,7 +539,7 @@ class GifEditorPage(QWidget):
 
         # Direction (for linear)
         self._grad_dir_row = QHBoxLayout(); self._grad_dir_row.setSpacing(4)
-        self._grad_dir_row.addWidget(QLabel("方向"))
+        self._grad_dir_row.addWidget(_styled_label("方向"))
         self._grad_dir_combo = QComboBox()
         self._grad_dir_combo.addItems(["上→下", "左→右", "左上→右下", "右上→左下"])
         self._grad_dir_combo.currentIndexChanged.connect(self._on_grad_dir_changed)
@@ -575,20 +586,20 @@ class GifEditorPage(QWidget):
         s_enable_row.addWidget(self._stroke_cb); s_enable_row.addStretch()
         s_lo.addLayout(s_enable_row)
         s_color_row = QHBoxLayout(); s_color_row.setSpacing(6)
-        s_color_row.addWidget(QLabel("颜色"))
+        s_color_row.addWidget(_styled_label("颜色"))
         self._stroke_color_btn = _color_btn(self._text_layer.stroke_color, 48)
         self._stroke_color_btn.clicked.connect(lambda: self._pick_color("stroke"))
         s_color_row.addWidget(self._stroke_color_btn)
         s_color_row.addSpacing(6)
-        s_color_row.addWidget(QLabel("粗细")); self._stroke_width_spin = _spin(0, 30, 8, 74)
+        s_color_row.addWidget(_styled_label("粗细")); self._stroke_width_spin = _spin(0, 30, 8, 74)
         self._stroke_width_spin.valueChanged.connect(self._on_style_changed)
-        s_color_row.addWidget(self._stroke_width_spin); s_color_row.addWidget(QLabel("px"))
+        s_color_row.addWidget(self._stroke_width_spin); s_color_row.addWidget(_styled_label("px"))
         s_color_row.addStretch()
         s_lo.addLayout(s_color_row)
 
         # Stroke opacity
         sop_row = QHBoxLayout(); sop_row.setSpacing(6)
-        sop_row.addWidget(QLabel("不透明度"))
+        sop_row.addWidget(_styled_label("不透明度"))
         self._stroke_opacity_sl = QSlider(Qt.Orientation.Horizontal)
         self._stroke_opacity_sl.setRange(5, 100)
         self._stroke_opacity_sl.setValue(100)
@@ -606,23 +617,23 @@ class GifEditorPage(QWidget):
         self._shadow_cb.toggled.connect(self._on_style_changed)
         sh_lo.addWidget(self._shadow_cb)
         sh_c_row = QHBoxLayout(); sh_c_row.setSpacing(6)
-        sh_c_row.addWidget(QLabel("颜色"))
+        sh_c_row.addWidget(_styled_label("颜色"))
         self._shadow_color_btn = _color_btn(self._text_layer.shadow_color, 48)
         self._shadow_color_btn.clicked.connect(lambda: self._pick_color("shadow"))
         sh_c_row.addWidget(self._shadow_color_btn)
         sh_c_row.addSpacing(6)
-        sh_c_row.addWidget(QLabel("不透明")); self._shadow_opacity_sl = _dslider(5, 100, 50)
+        sh_c_row.addWidget(_styled_label("不透明")); self._shadow_opacity_sl = _dslider(5, 100, 50)
         self._shadow_opacity_sl.valueChanged.connect(self._on_style_changed)
         sh_c_row.addWidget(self._shadow_opacity_sl, 1)
         sh_lo.addLayout(sh_c_row)
         sh_off_row = QHBoxLayout(); sh_off_row.setSpacing(4)
-        sh_off_row.addWidget(QLabel("X")); self._shadow_x_spin = _spin(-50, 50, 3, 70)
+        sh_off_row.addWidget(_styled_label("X")); self._shadow_x_spin = _spin(-50, 50, 3, 70)
         self._shadow_x_spin.valueChanged.connect(self._on_style_changed); sh_off_row.addWidget(self._shadow_x_spin)
         sh_off_row.addSpacing(2)
-        sh_off_row.addWidget(QLabel("Y")); self._shadow_y_spin = _spin(-50, 50, 3, 70)
+        sh_off_row.addWidget(_styled_label("Y")); self._shadow_y_spin = _spin(-50, 50, 3, 70)
         self._shadow_y_spin.valueChanged.connect(self._on_style_changed); sh_off_row.addWidget(self._shadow_y_spin)
         sh_off_row.addSpacing(2)
-        sh_off_row.addWidget(QLabel("模糊")); self._shadow_blur_spin = _spin(0, 50, 4, 70)
+        sh_off_row.addWidget(_styled_label("模糊")); self._shadow_blur_spin = _spin(0, 50, 4, 70)
         self._shadow_blur_spin.valueChanged.connect(self._on_style_changed); sh_off_row.addWidget(self._shadow_blur_spin)
         sh_off_row.addStretch()
         sh_lo.addLayout(sh_off_row)
@@ -637,20 +648,20 @@ class GifEditorPage(QWidget):
         self._bg_enabled_cb.toggled.connect(self._on_style_changed)
         bg_lo.addWidget(self._bg_enabled_cb)
         bg_c_row = QHBoxLayout(); bg_c_row.setSpacing(6)
-        bg_c_row.addWidget(QLabel("颜色"))
+        bg_c_row.addWidget(_styled_label("颜色"))
         self._bg_color_btn = _color_btn(self._text_layer.background_color, 48)
         self._bg_color_btn.clicked.connect(lambda: self._pick_color("background"))
         bg_c_row.addWidget(self._bg_color_btn)
         bg_c_row.addSpacing(6)
-        bg_c_row.addWidget(QLabel("不透明")); self._bg_opacity_sl = _dslider(5, 100, 60)
+        bg_c_row.addWidget(_styled_label("不透明")); self._bg_opacity_sl = _dslider(5, 100, 60)
         self._bg_opacity_sl.valueChanged.connect(self._on_style_changed)
         bg_c_row.addWidget(self._bg_opacity_sl, 1)
         bg_lo.addLayout(bg_c_row)
         bg_p_row = QHBoxLayout(); bg_p_row.setSpacing(4)
-        bg_p_row.addWidget(QLabel("圆角")); self._bg_radius_spin = _spin(0, 40, 12, 70)
+        bg_p_row.addWidget(_styled_label("圆角")); self._bg_radius_spin = _spin(0, 40, 12, 70)
         self._bg_radius_spin.valueChanged.connect(self._on_style_changed); bg_p_row.addWidget(self._bg_radius_spin)
         bg_p_row.addSpacing(2)
-        bg_p_row.addWidget(QLabel("内距")); self._bg_padding_spin = _spin(0, 40, 12, 70)
+        bg_p_row.addWidget(_styled_label("内距")); self._bg_padding_spin = _spin(0, 40, 12, 70)
         self._bg_padding_spin.valueChanged.connect(self._on_style_changed); bg_p_row.addWidget(self._bg_padding_spin)
         bg_p_row.addStretch()
         bg_lo.addLayout(bg_p_row)
@@ -665,16 +676,16 @@ class GifEditorPage(QWidget):
         self._border_cb.toggled.connect(self._on_style_changed)
         bd_lo.addWidget(self._border_cb)
         bd_c_row = QHBoxLayout(); bd_c_row.setSpacing(6)
-        bd_c_row.addWidget(QLabel("颜色"))
+        bd_c_row.addWidget(_styled_label("颜色"))
         self._border_color_btn = _color_btn(self._text_layer.border_color, 48)
         self._border_color_btn.clicked.connect(lambda: self._pick_color("border"))
         bd_c_row.addWidget(self._border_color_btn)
         bd_c_row.addSpacing(6)
-        bd_c_row.addWidget(QLabel("粗细")); self._border_width_spin = _spin(1, 10, 2, 70)
+        bd_c_row.addWidget(_styled_label("粗细")); self._border_width_spin = _spin(1, 10, 2, 70)
         self._border_width_spin.valueChanged.connect(self._on_style_changed)
         bd_c_row.addWidget(self._border_width_spin)
         bd_c_row.addSpacing(6)
-        bd_c_row.addWidget(QLabel("不透明")); self._border_opacity_sl = _dslider(5, 100, 100)
+        bd_c_row.addWidget(_styled_label("不透明")); self._border_opacity_sl = _dslider(5, 100, 100)
         self._border_opacity_sl.valueChanged.connect(self._on_style_changed)
         bd_c_row.addWidget(self._border_opacity_sl, 1)
         bd_lo.addLayout(bd_c_row)
@@ -686,9 +697,9 @@ class GifEditorPage(QWidget):
         pos_group = _styled_group("位置")
         pos_lo = QVBoxLayout(pos_group); pos_lo.setSpacing(4)
         coord_row = QHBoxLayout(); coord_row.setSpacing(6)
-        coord_row.addWidget(QLabel("X")); self._x_spin = QSpinBox(); self._x_spin.setRange(-9999, 9999)
+        coord_row.addWidget(_styled_label("X")); self._x_spin = QSpinBox(); self._x_spin.setRange(-9999, 9999)
         self._x_spin.valueChanged.connect(self._on_pos_spin); coord_row.addWidget(self._x_spin)
-        coord_row.addWidget(QLabel("Y")); self._y_spin = QSpinBox(); self._y_spin.setRange(-9999, 9999)
+        coord_row.addWidget(_styled_label("Y")); self._y_spin = QSpinBox(); self._y_spin.setRange(-9999, 9999)
         self._y_spin.valueChanged.connect(self._on_pos_spin); coord_row.addWidget(self._y_spin)
         pos_lo.addLayout(coord_row)
 
@@ -720,7 +731,7 @@ class GifEditorPage(QWidget):
 
         # Anchor
         anc_row = QHBoxLayout(); anc_row.setSpacing(6)
-        anc_row.addWidget(QLabel("锚点"))
+        anc_row.addWidget(_styled_label("锚点"))
         self._anchor_combo = QComboBox()
         self._anchor_combo.addItems(["左上", "上中", "右上", "左中", "中心", "右中", "左下", "下中", "右下"])
         self._anchor_combo.setCurrentIndex(4)  # 中心
