@@ -164,6 +164,14 @@ class BatchPage(QWidget):
         self._elapsed_timer.timeout.connect(self._tick_timer)
         self._elapsed_timer.start(200)
 
+        # Disconnect previous worker to avoid duplicate finished dialogs
+        if self._worker:
+            try:
+                self._worker.progress.disconnect(self._on_progress)
+                self._worker.mp4_log.disconnect(self._on_mp4_log)
+                self._worker.finished.disconnect(self._on_finished)
+            except RuntimeError:
+                pass
         self._worker = BatchWorker(self._manager, regions)
         self._worker.progress.connect(self._on_progress)
         self._worker.mp4_log.connect(self._on_mp4_log)
@@ -205,15 +213,32 @@ class BatchPage(QWidget):
             self._elapsed_timer.stop()
         self._tick_timer()
         elapsed = int(time.time() - self._start_time)
+
+        # Count success and calculate per-video average
+        ok_count = 0
+        fail_count = 0
+        for line in self._log_text.toPlainText().splitlines():
+            if line.startswith("[OK]"):
+                ok_count += 1
+            elif line.startswith("[FAIL]"):
+                fail_count += 1
+        total_count = ok_count + fail_count
+        avg_str = ""
+        if ok_count > 0:
+            avg_s = elapsed / ok_count
+            avg_str = f"平均每个视频: {avg_s:.1f} 秒"
+
         self._status_label.setText(
             f"生成完成！耗时 {elapsed // 60}分{elapsed % 60}秒 | 报告: AA视频生成报告.txt"
         )
         QMessageBox.information(
             self, "完成",
             f"批量生成完成！\n\n"
-            f"耗时: {elapsed // 60}分{elapsed % 60}秒\n\n"
-            f"输出文件:\n"
-            f"  output/生成的视频/  — MP4 视频 + AA视频生成报告.txt"
+            f"成功: {ok_count} 个  "
+            f"失败: {fail_count} 个  "
+            f"总耗时: {elapsed} 秒\n"
+            f"{avg_str}\n"
+            f"输出目录: 生成的视频/"
         )
 
     def set_output_dir(self, path: str):
