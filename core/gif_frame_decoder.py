@@ -1,4 +1,5 @@
 import os
+import threading
 from collections import OrderedDict
 
 from PIL import Image, ImageSequence
@@ -17,12 +18,14 @@ class GifFrameDecoder:
         self._durations: list[int] = []
         self._total_frames: int = 0
         self._has_alpha: bool = False
-        self._frames: dict[int, Image.Image] = {}
+        self._frames: dict[int, bytes] = {}
         self._use_lru: bool = False
+        self._lock = threading.Lock()
 
     def load(self, gif_path: str) -> None:
         self._path = gif_path
-        self._frames.clear()
+        with self._lock:
+            self._frames.clear()
 
         img = Image.open(gif_path)
         self._size = (img.width, img.height)
@@ -40,7 +43,8 @@ class GifFrameDecoder:
             self._durations.append(duration)
 
             if not self._use_lru:
-                self._frames[frame_index] = rgba
+                with self._lock:
+                    self._frames[frame_index] = rgba.tobytes()
             frame_index += 1
 
         img.close()
@@ -50,6 +54,24 @@ class GifFrameDecoder:
                 f"Frame count mismatch: expected {self._total_frames}, got {len(self._durations)}"
             )
             self._total_frames = len(self._durations)
+
+        # Diagnostic: check whether source template frames are actually different
+        if self._total_frames >= 2 and not self._use_lru:
+            import hashlib
+            with self._lock:
+                h0 = hashlib.md5(self._frames[0]).hexdigest()
+                h1 = hashlib.md5(self._frames[1]).hexdigest()
+            if h0 == h1:
+                logger.warning(
+                    f"Source GIF has IDENTICAL frames! ({self._total_frames} frames, "
+                    f"all same hash={h0[:12]}...). "
+                    f"Output GIF will appear static — use a different source GIF with animation."
+                )
+            else:
+                logger.debug(
+                    f"Source GIF frames OK: f0={h0[:12]}... f1={h1[:12]}... "
+                    f"({self._total_frames} frames)"
+                )
 
         logger.info(
             f"GIF loaded: {self._size[0]}x{self._size[1]}, "
@@ -64,11 +86,21 @@ class GifFrameDecoder:
         return self._total_frames
 
     def get_frame(self, index: int) -> Image.Image | None:
+        """Return an independent RGBA PIL Image for frame `index`.
+
+        Always returns a new Image reconstructed from raw bytes, so the caller
+        owns it completely — safe to call concurrently from any thread.
+        """
         if index < 0 or index >= self._total_frames:
             return None
 
-        if index in self._frames:
-            return self._frames[index]
+        raw = None
+        with self._lock:
+            if index in self._frames:
+                raw = self._frames[index]
+
+        if raw is not None:
+            return Image.frombytes("RGBA", self._size, raw)
 
         if self._use_lru:
             return self._load_single_frame(index)
@@ -82,10 +114,12 @@ class GifFrameDecoder:
         for i, frame in enumerate(ImageSequence.Iterator(img)):
             if i == index:
                 rgba = frame.convert("RGBA")
-                self._frames[index] = rgba
+                raw = rgba.tobytes()
+                with self._lock:
+                    self._frames[index] = raw
                 self._trim_lru_cache(index)
                 img.close()
-                return rgba
+                return Image.frombytes("RGBA", self._size, raw)
         img.close()
         return None
 
@@ -93,9 +127,10 @@ class GifFrameDecoder:
         keep_start = max(0, current - LRU_WINDOW)
         keep_end = min(self._total_frames, current + LRU_WINDOW + 1)
         keep = set(range(keep_start, keep_end))
-        for k in list(self._frames.keys()):
-            if k not in keep:
-                del self._frames[k]
+        with self._lock:
+            for k in list(self._frames.keys()):
+                if k not in keep:
+                    del self._frames[k]
 
     def get_duration(self, index: int) -> int:
         if 0 <= index < len(self._durations):

@@ -1,3 +1,4 @@
+import hashlib
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -66,14 +67,31 @@ class GifRenderService:
                     logger.error(f"Failed to get frame {i} for: {region_name}")
                     return False
 
-                result = frame.copy()
-                result.paste(text_img, text_pos, text_img)
+                # get_frame() now returns a fresh Image every time — no copy needed
+                frame.paste(text_img, text_pos, text_img)
 
                 if not skip_png and output_png_sequence_dir:
                     png_path = os.path.join(output_png_sequence_dir, f"frame_{i+1:05d}.png")
-                    result.save(png_path, "PNG")
+                    frame.save(png_path, "PNG")
 
-                frames.append(result)
+                frames.append(frame)
+
+            # Verify frames are not all identical (diagnostic for intermittent bug)
+            if total_frames >= 2:
+                h0 = hashlib.md5(frames[0].tobytes()).hexdigest()
+                h1 = hashlib.md5(frames[1].tobytes()).hexdigest()
+                if h0 == h1:
+                    h_last = hashlib.md5(frames[-1].tobytes()).hexdigest()
+                    logger.warning(
+                        f"All rendered GIF frames appear identical for '{region_name}' "
+                        f"(frames={total_frames}, hash={h0[:12]}...). "
+                        f"Source GIF may have identical frames."
+                    )
+                else:
+                    logger.debug(
+                        f"Frame uniqueness OK for '{region_name}': "
+                        f"f0={h0[:12]}... f1={h1[:12]}..."
+                    )
 
             # Save GIF
             os.makedirs(os.path.dirname(output_gif_path), exist_ok=True)

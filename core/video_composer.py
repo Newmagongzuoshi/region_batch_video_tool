@@ -207,8 +207,15 @@ class VideoComposer:
                 overlay_input = ["-framerate", str(round(png_fps, 2)), "-i", png_pattern]
                 logger.info(f"Using PNG sequence: {png_pattern} @ {png_fps:.1f}fps")
             else:
-                overlay_input = ["-ignore_loop", "1", "-i", region_gif_path]
-                logger.info(f"Using GIF directly: {region_gif_path}")
+                # Use -stream_loop -1 to ensure FFmpeg decodes all GIF frames.
+                # -ignore_loop 1 can cause the demuxer to output only one frame.
+                # The overlay enable= expression limits display to exactly GIF duration.
+                gif_duration_s = sum(gif_durations) / 1000.0 if gif_durations else 0
+                logger.info(
+                    f"Using GIF directly: {region_gif_path} "
+                    f"(gif={gif_duration_s:.1f}s, video={duration_str}s)"
+                )
+                overlay_input = ["-stream_loop", "-1", "-i", region_gif_path]
 
             cmd = [ffmpeg_exe, "-y", "-i", source_video_path]
             cmd.extend(overlay_input)
@@ -222,10 +229,14 @@ class VideoComposer:
             else:
                 scale_filter = ""
 
+            # enable=lt(t, GIF_DUR) — overlay only active for the GIF's natural duration,
+            # then disappears. shortest=1 — end when source video ends (GIF loops forever).
+            gif_enable = f"enable='lt(t,{gif_duration_s})'" if gif_duration_s > 0 else ""
+
             if has_audio:
                 filter_complex = (
                     f"[1:v]format=rgba,{scale_filter}setpts=PTS-STARTPTS[gifv];"
-                    f"[0:v][gifv]overlay={ox}:{oy}:eof_action=pass:shortest=0[vout];"
+                    f"[0:v][gifv]overlay={ox}:{oy}:shortest=1:{gif_enable}[vout];"
                     "[0:a][2:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
                 )
                 cmd.extend(["-filter_complex", filter_complex, "-map", "[vout]", "-map", "[aout]"])
@@ -236,7 +247,7 @@ class VideoComposer:
                 ])
                 filter_complex = (
                     f"[1:v]format=rgba,{scale_filter}setpts=PTS-STARTPTS[gifv];"
-                    f"[0:v][gifv]overlay={ox}:{oy}:eof_action=pass:shortest=0[vout];"
+                    f"[0:v][gifv]overlay={ox}:{oy}:shortest=1:{gif_enable}[vout];"
                     "[3:a][2:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
                 )
                 cmd.extend(["-filter_complex", filter_complex, "-map", "[vout]", "-map", "[aout]"])
