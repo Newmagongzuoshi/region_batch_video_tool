@@ -46,14 +46,12 @@ class GifRenderService:
                 logger.error(f"Failed to render text for: {region_name}")
                 return False
 
-            # Recalculate X/Y based on *actual* text image size so that centering
-            # adapts to different region-name lengths (critical for transparent GIFs
-            # where text position is the only visible reference).
-            gif_w, gif_h = self._decoder.get_size()
+            # Recalculate X based on actual text width so centering adapts to
+            # different region-name lengths. Y is preserved from user's setting.
             if text_layer.center_horizontal:
+                gif_w = self._decoder.get_size()[0]
                 text_x = int((gif_w - text_img.width) / 2)
-                text_y = int((gif_h - text_img.height) / 2)
-                text_pos = (max(0, text_x), max(0, text_y))
+                text_pos = (max(0, text_x), int(text_layer.y))
             else:
                 text_pos = (int(text_layer.x), int(text_layer.y))
 

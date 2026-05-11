@@ -1563,24 +1563,19 @@ class GifEditorPage(QWidget):
         self.text_layer_changed.emit(self._text_layer)
 
     def _recenter_text(self):
-        """Re-center text horizontally AND vertically on the GIF."""
+        """Re-center text horizontally on the GIF.  Does not touch Y."""
         if not self._text_item or not self._decoder:
             return
         pixmap = self._text_item._pixmap
         if pixmap is None or pixmap.isNull():
             return
-        gif_w, gif_h = self._decoder.get_size()
+        gif_w = self._decoder.get_size()[0]
         x = max(0, (gif_w - pixmap.width()) / 2)
-        y = max(0, (gif_h - pixmap.height()) / 2)
-        self._text_item.setPos(x, y)
+        self._text_item.setPos(x, self._text_layer.y)
         self._text_layer.x = x
-        self._text_layer.y = y
         self._x_spin.blockSignals(True)
         self._x_spin.setValue(int(x))
         self._x_spin.blockSignals(False)
-        self._y_spin.blockSignals(True)
-        self._y_spin.setValue(int(y))
-        self._y_spin.blockSignals(False)
 
     def _render_text_pixmap(self, text: str) -> QPixmap | None:
         try:
