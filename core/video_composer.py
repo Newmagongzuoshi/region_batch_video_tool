@@ -263,16 +263,16 @@ class VideoComposer:
             # Quality flags per encoder (prevents blurry GPU output)
             quality_flags = []
             if "nvenc" in enc_codec:
-                quality_flags = ["-b:v", "12M", "-maxrate", "15M", "-bufsize", "20M",
+                quality_flags = ["-b:v", "6M", "-maxrate", "8M", "-bufsize", "12M",
                                  "-rc", "vbr", "-spatial_aq", "1", "-temporal_aq", "1"]
             elif "amf" in enc_codec:
-                quality_flags = ["-b:v", "12M", "-maxrate", "15M", "-bufsize", "20M",
+                quality_flags = ["-b:v", "6M", "-maxrate", "8M", "-bufsize", "12M",
                                  "-quality", "quality"]
             elif "qsv" in enc_codec:
-                quality_flags = ["-b:v", "12M", "-maxrate", "15M", "-bufsize", "20M",
+                quality_flags = ["-b:v", "6M", "-maxrate", "8M", "-bufsize", "12M",
                                  "-look_ahead", "1"]
             elif "mf" in enc_codec:
-                quality_flags = ["-b:v", "12M"]
+                quality_flags = ["-b:v", "6M"]
 
             cmd.extend([
                 "-t", duration_str,
