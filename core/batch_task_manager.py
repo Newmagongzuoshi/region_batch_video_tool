@@ -91,20 +91,6 @@ class BatchTaskManager:
         self._stopped = False
         self._results = []
 
-        # ---- Video compression: create compressed source copy if enabled ----
-        from ui.settings_page import load_video_compress
-        if load_video_compress():
-            import hashlib
-            src_hash = hashlib.md5(source_video_path.encode()).hexdigest()[:8]
-            compressed = os.path.join(self._cache_mgr._video_temp_dir,
-                                      f"_compressed_{src_hash}.mp4")
-            if not os.path.isfile(compressed):
-                logger.info(f"[COMPRESS] Creating compressed source copy...")
-                self._compress_source(source_video_path, compressed)
-            if os.path.isfile(compressed) and os.path.getsize(compressed) > 1000:
-                self._source_video_path = compressed
-                logger.info(f"[COMPRESS] Using compressed source")
-
         self._gif_temp_dir = os.path.join(self._cache_mgr._video_temp_dir, "gif_temp")
         self._mp3_temp_dir = os.path.join(self._cache_mgr._audio_temp_dir, "mp3_temp")
         os.makedirs(self._gif_temp_dir, exist_ok=True)
@@ -386,24 +372,6 @@ class BatchTaskManager:
         self._find_result(safe)["error"] = "FFmpeg failed"
         self._cleanup_temp(gif_path, mp3_path)
 
-    @staticmethod
-    def _compress_source(src: str, out: str):
-        """Compress source video with CPU x264 slow preset for small size."""
-        import subprocess, sys
-        ff = FFmpegService()
-        fex = ff.ffmpeg_path or "ffmpeg"
-        flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-        r = subprocess.run(
-            [fex, "-y", "-i", src,
-             "-c:v", "libx264", "-preset", "slow", "-crf", "20",
-             "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
-             "-movflags", "+faststart", out],
-            capture_output=True, text=True, timeout=300,
-            creationflags=flags,
-        )
-        if r.returncode != 0:
-            raise RuntimeError(f"Compress failed: {(r.stderr or '')[-200:]}")
-
     def _encode_tail(self, src: str, out: str, split_time: float):
         """Re-encode tail segment with GPU for frame-accurate start. Cached."""
         import subprocess, sys
@@ -411,10 +379,13 @@ class BatchTaskManager:
         fex = ff.ffmpeg_path or "ffmpeg"
         enc = self._composer._encoder
         codec = enc["codec"]
-        # Match source video bitrate
+        # Match source bitrate, or compress if setting enabled
+        from ui.settings_page import load_video_compress
         src_br = self._video_info.bitrate if self._video_info else 0
         if src_br <= 0:
             src_br = 5000
+        if load_video_compress():
+            src_br = 3000
         br = f"{max(2000, int(src_br))}k"
         max_br = f"{max(3000, int(src_br * 1.3))}k"
         buf = f"{max(4000, int(src_br * 2))}k"

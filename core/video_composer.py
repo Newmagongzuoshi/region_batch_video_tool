@@ -260,10 +260,13 @@ class VideoComposer:
             enc_codec = enc["codec"]
             enc_preset = enc["preset"]
 
-            # Match source video bitrate for consistent quality/size
+            # Match source bitrate, or compress if setting enabled
+            from ui.settings_page import load_video_compress
             src_br = video_info.bitrate if video_info else 0
             if src_br <= 0:
                 src_br = 5000
+            if load_video_compress():
+                src_br = 3000  # 3Mbps compressed
             br = f"{max(2000, int(src_br))}k"
             max_br = f"{max(3000, int(src_br * 1.3))}k"
             buf = f"{max(4000, int(src_br * 2))}k"
