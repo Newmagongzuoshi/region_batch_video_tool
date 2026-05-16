@@ -263,11 +263,11 @@ class VideoComposer:
             # Quality flags per encoder (prevents blurry GPU output)
             quality_flags = []
             if "nvenc" in enc_codec:
-                quality_flags = ["-cq", "20", "-rc", "vbr"]
+                quality_flags = ["-cq", "18", "-rc", "vbr", "-b_ref_mode", "middle"]
             elif "amf" in enc_codec:
-                quality_flags = ["-qp_i", "20", "-qp_p", "22", "-quality", "quality"]
+                quality_flags = ["-qp_i", "18", "-qp_p", "20", "-quality", "quality"]
             elif "qsv" in enc_codec:
-                quality_flags = ["-global_quality", "20"]
+                quality_flags = ["-global_quality", "18"]
             elif "mf" in enc_codec:
                 quality_flags = ["-q:v", "2"]
 
