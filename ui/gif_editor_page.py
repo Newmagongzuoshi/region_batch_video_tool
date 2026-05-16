@@ -1039,6 +1039,7 @@ class GifEditorPage(QWidget):
             self._add_text()
         else:
             self._render_preview()
+        self.text_layer_changed.emit(tl)
 
     # === Preview mode ===
     def enter_preview_mode(self):
