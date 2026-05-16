@@ -184,8 +184,13 @@ class BatchPage(QWidget):
         info_row.addWidget(hw_group)
 
         # 生成方案
-        plan_group = QGroupBox("生成方案")
+        plan_group = QGroupBox("生成方案（速度排序）")
         plan_layout = QVBoxLayout(plan_group)
+        # Hint showing all options
+        hint = QLabel("① NVIDIA NVENC  >  ② AMD AMF  >  ③ Intel QSV  >  ④ CPU x264")
+        hint.setStyleSheet("color: #888; font-size: 10px;")
+        hint.setWordWrap(True)
+        plan_layout.addWidget(hint)
         self._plan_encoder = QLabel("编码器: 等待初始化...")
         self._plan_workers = QLabel("并发数: -")
         self._plan_split = QLabel("视频分段: -")
@@ -260,7 +265,15 @@ class BatchPage(QWidget):
 
     def update_scheme_info(self, encoder_desc: str, workers: int, use_split: bool, head_dur: float = 0):
         """Update generation scheme display after initialization."""
-        self._plan_encoder.setText(f"编码器: {encoder_desc}")
+        # Encoder ranking by speed
+        rank_map = {
+            "NVIDIA NVENC GPU": "① 最快",
+            "AMD AMF GPU": "② 快",
+            "Intel QSV GPU": "③ 较快",
+            "CPU x264": "④ 慢",
+        }
+        rank = rank_map.get(encoder_desc, "")
+        self._plan_encoder.setText(f"编码器: {encoder_desc}  {rank}")
         self._plan_workers.setText(f"并发数: {workers} 线程")
         if use_split:
             self._plan_split.setText(f"视频分段: head({head_dur:.1f}s)+tail 复用模式")
