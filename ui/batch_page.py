@@ -20,47 +20,83 @@ def _collect_system_info() -> dict:
     """Collect CPU/GPU/Memory info for display."""
     info = {"cpu": "", "gpu": "", "memory": ""}
 
-    # CPU
-    cpu_name = platform.processor() or "Unknown"
-    cores = os.cpu_count() or 1
-    info["cpu"] = f"{cpu_name} ({cores} 核)"
-
-    # Memory
-    try:
-        import psutil
-        mem = psutil.virtual_memory()
-        info["memory"] = f"{mem.total / (1024**3):.1f} GB"
-    except ImportError:
+    # CPU — try PowerShell first for short name
+    cpu_name = ""
+    if sys.platform == "win32":
         try:
             result = subprocess.run(
-                ["wmic", "computersystem", "get", "totalphysicalmemory"],
+                ["powershell", "-Command",
+                 "(Get-CimInstance Win32_Processor).Name"],
                 capture_output=True, text=True, timeout=10,
                 creationflags=subprocess.CREATE_NO_WINDOW,
             )
-            lines = result.stdout.strip().split()
-            if len(lines) >= 2:
-                total_bytes = int(lines[1])
-                info["memory"] = f"{total_bytes / (1024**3):.0f} GB"
-        except Exception:
-            info["memory"] = "未知"
-
-    # GPU
-    gpus = []
-    for cmd in [
-        ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
-        ["wmic", "path", "win32_videocontroller", "get", "name"],
-    ]:
-        try:
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=10,
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
-            )
-            lines = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
-            if lines:
-                gpus.extend(lines[:2])
-                break
+            cpu_name = result.stdout.strip().split("\n")[0].strip()
         except Exception:
             pass
+    if not cpu_name:
+        cpu_name = platform.processor() or "Unknown"
+    # Clean up common prefixes
+    import re
+    cpu_name = re.sub(r'Intel\(R\)\s*Core\(TM\)\s*', '', cpu_name)
+    cpu_name = re.sub(r'Intel\(R\)\s*', '', cpu_name)
+    cpu_name = re.sub(r'\s+CPU\s*@.*', '', cpu_name)
+    cpu_name = re.sub(r'\s+', ' ', cpu_name).strip()
+    cores = os.cpu_count() or 1
+    info["cpu"] = f"{cpu_name} ({cores} 核)" if cpu_name else f"{cores} 核 CPU"
+
+    # Memory — PowerShell is more reliable than wmic
+    mem_str = ""
+    if sys.platform == "win32":
+        try:
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 "[math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory/1GB)"],
+                capture_output=True, text=True, timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            gb = result.stdout.strip()
+            if gb.isdigit():
+                mem_str = f"{gb} GB"
+        except Exception:
+            pass
+    if not mem_str:
+        try:
+            import psutil
+            mem = psutil.virtual_memory()
+            mem_str = f"{mem.total / (1024**3):.0f} GB"
+        except ImportError:
+            mem_str = "未知"
+    info["memory"] = mem_str
+
+    # GPU: try multiple methods
+    gpus = []
+    if sys.platform == "win32":
+        # Method 1: PowerShell (most reliable on Windows)
+        try:
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 "(Get-CimInstance Win32_VideoController).Name"],
+                capture_output=True, text=True, timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            gpus = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()
+                    and "OrayIdd" not in l]  # skip virtual displays
+        except Exception:
+            pass
+        # Method 2: nvidia-smi (try common paths)
+        if not gpus:
+            for nv_path in [r"C:\Windows\System32\nvidia-smi.exe",
+                          r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe"]:
+                try:
+                    result = subprocess.run(
+                        [nv_path, "--query-gpu=name", "--format=csv,noheader"],
+                        capture_output=True, text=True, timeout=10,
+                        creationflags=subprocess.CREATE_NO_WINDOW,
+                    )
+                    gpus = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
+                    if gpus: break
+                except Exception:
+                    continue
     info["gpu"] = " + ".join(gpus[:2]) if gpus else "未检测到独立显卡"
 
     return info
