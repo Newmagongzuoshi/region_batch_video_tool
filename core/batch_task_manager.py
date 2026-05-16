@@ -93,6 +93,10 @@ class BatchTaskManager:
 
         self._gif_temp_dir = os.path.join(self._cache_mgr._video_temp_dir, "gif_temp")
         self._mp3_temp_dir = os.path.join(self._cache_mgr._audio_temp_dir, "mp3_temp")
+        # Clear old GIF cache — style changes would be ignored otherwise
+        if os.path.isdir(self._gif_temp_dir):
+            import shutil
+            shutil.rmtree(self._gif_temp_dir, ignore_errors=True)
         os.makedirs(self._gif_temp_dir, exist_ok=True)
         os.makedirs(self._mp3_temp_dir, exist_ok=True)
         os.makedirs(self._output_video_dir, exist_ok=True)
