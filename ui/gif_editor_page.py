@@ -1011,10 +1011,9 @@ class GifEditorPage(QWidget):
         # Use font manager to resolve both system and built-in fonts
         tl.font_path = self._font_mgr.get_font_path(font_family)
 
-        # font_size and weight always come from the current "{地区}" text.
-        # Templates only change colors, stroke, shadow, etc.
         for key, default in [
-            ("bold", True), ("italic", False),
+            ("font_size", tl.font_size), ("bold", True), ("italic", False),
+            ("weight", tl.weight),
             ("fill_color", "#FFD700"), ("opacity", 1.0),
             ("letter_spacing", 0), ("line_spacing", 8), ("align", "center"),
             ("vertical", False),
