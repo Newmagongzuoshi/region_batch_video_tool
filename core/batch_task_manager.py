@@ -101,8 +101,8 @@ class BatchTaskManager:
         tl = self._gif_text_layer
         style_key = (
             tl.fill_color, tl.stroke_color, str(tl.stroke_width),
-            getattr(tl, "stroke_mode", "outer"),
-            getattr(tl, "glow_enabled", False), getattr(tl, "glow_color", ""),
+            str(getattr(tl, "stroke_mode", "outer")),
+            str(getattr(tl, "glow_enabled", False)), str(getattr(tl, "glow_color", "")),
             tl.font_family, str(tl.font_size), str(tl.weight),
             str(tl.bold), str(tl.italic),
             str(tl.shadow_enabled), tl.shadow_color, str(tl.shadow_opacity),
