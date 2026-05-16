@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from core.gif_render_service import GifRenderService
 from core.gif_frame_decoder import GifFrameDecoder
 from core.tts_windows_sapi import WindowsSapiTTSEngine
+from core.tts_edge import EdgeTTSEngine
 from core.video_composer import VideoComposer
 from core.ffmpeg_service import FFmpegService
 from core.cache_manager import CacheManager
@@ -154,6 +155,49 @@ class BatchTaskManager:
         completed = 0
         self._elapsed_sec = 0.0
         t_start = time.time()
+
+        # ---- Pre-generate all TTS in parallel ----
+        logger.info(f"=== Pre-generating TTS for {total} regions ===")
+        tts_engine = self._sapi_engine
+        use_edge = False
+        try:
+            edge = EdgeTTSEngine(self._ffmpeg.ffmpeg_path or "ffmpeg")
+            if edge.test_connection():
+                tts_engine = edge
+                use_edge = True
+                logger.info("TTS: Using Edge TTS (fast concurrent HTTP)")
+        except Exception:
+            pass
+        if not use_edge:
+            logger.info("TTS: Using Windows SAPI (may be slower)")
+
+        # Generate all MP3s concurrently
+        tts_workers = min(total, 24 if use_edge else 4)  # Edge=unlimited, SAPI=limited
+        tts_total = 0
+        tts_done = 0
+        with ThreadPoolExecutor(max_workers=tts_workers) as tts_ex:
+            tts_futures = {}
+            for r in regions:
+                region = r["region"]
+                safe = r["safe_filename"]
+                mp3_path = os.path.join(self._mp3_temp_dir, f"{safe}.mp3")
+                if os.path.isfile(mp3_path) and os.path.getsize(mp3_path) > 100:
+                    continue  # cached
+                fut = tts_ex.submit(self._synthesize_tts, tts_engine, region, safe, mp3_path, use_edge)
+                tts_futures[fut] = (safe, region)
+                tts_total += 1
+            for fut in as_completed(tts_futures):
+                if self._stopped:
+                    break
+                safe, region = tts_futures[fut]
+                try:
+                    fut.result()
+                except Exception:
+                    pass
+                tts_done += 1
+                if on_progress:
+                    on_progress("tts", {"current": tts_done, "total": tts_total})
+
         logger.info(f"=== Pipeline: {total} regions, {self._worker_count} workers ===")
 
         with ThreadPoolExecutor(max_workers=self._worker_count) as ex:
@@ -177,6 +221,18 @@ class BatchTaskManager:
         self._write_report()
         logger.info("=== Pipeline done ===")
 
+    @staticmethod
+    def _synthesize_tts(engine, region: str, safe: str, mp3_path: str, is_edge: bool):
+        """Generate one MP3 via TTS engine (called in parallel)."""
+        try:
+            if is_edge:
+                return engine.synthesize(region, "", mp3_path)
+            else:
+                return engine.synthesize(region, "", mp3_path)
+        except Exception as e:
+            logger.error(f"TTS failed [{region}]: {e}")
+            return False
+
     def _process_one_region(self, r: dict):
         region = r["region"]
         safe = r["safe_filename"]
@@ -197,22 +253,9 @@ class BatchTaskManager:
             self._find_result(safe)["error"] = "GIF render failed"
             return
 
-        # --- Step 2: MP3 ---
+        # --- Step 2: MP3 (pre-generated) ---
         mp3_path = os.path.join(self._mp3_temp_dir, f"{safe}.mp3")
-        mp3_ok = True
-        if self._existing_file_policy != "skip" or not os.path.isfile(mp3_path) or os.path.getsize(mp3_path) <= 0:
-            mp3_ok = False
-            if self._sapi_engine:
-                for attempt in range(MAX_RETRIES + 1):
-                    try:
-                        if self._sapi_engine.synthesize(region, "", mp3_path):
-                            mp3_ok = True
-                            break
-                    except Exception:
-                        pass
-                    if attempt < MAX_RETRIES:
-                        time.sleep(1)
-        if not mp3_ok:
+        if not os.path.isfile(mp3_path) or os.path.getsize(mp3_path) <= 100:
             self._find_result(safe)["mp4"] = "fail"
             self._find_result(safe)["error"] = "TTS failed"
             return
@@ -224,7 +267,6 @@ class BatchTaskManager:
         mp4_path = os.path.join(self._output_video_dir, f"{safe}.mp4")
         if self._existing_file_policy == "skip" and os.path.isfile(mp4_path) and os.path.getsize(mp4_path) > 0:
             self._find_result(safe)["mp4"] = "ok"
-            self._cleanup_temp(gif_path, mp3_path)
             return
 
         for attempt in range(MAX_RETRIES + 1):
@@ -240,7 +282,6 @@ class BatchTaskManager:
                 ok = self._compose_mp4_fast(gif_path, adjusted_mp3, mp4_path, safe)
                 if ok and os.path.isfile(mp4_path) and os.path.getsize(mp4_path) > 0:
                     self._find_result(safe)["mp4"] = "ok"
-                    self._cleanup_temp(gif_path, mp3_path, adjusted_mp3)
                     return
             except Exception as e:
                 logger.error(f"MP4 error [{region}]: {e}")
