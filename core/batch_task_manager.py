@@ -29,7 +29,7 @@ def _get_worker_count(encoder_codec: str) -> int:
     elif "amf" in encoder_codec:
         return min(CPU_COUNT, 4)
     elif "qsv" in encoder_codec:
-        return min(CPU_COUNT, 6)
+        return min(CPU_COUNT, 8)
     else:
         # CPU x264: oversubscribe but don't thrash
         if CPU_COUNT <= 4:
@@ -365,8 +365,7 @@ class BatchTaskManager:
             if not ok:
                 return False
 
-            # Step 2: re-encode head_out with CPU to match tail's H.264 codec.
-            # Only 3 seconds — ultrafast preset finishes in <1s.
+            # Step 2: fix H.264 bitstream for concat compatibility (instant, no re-encode)
             head_fixed = head_out.replace(".mp4", "_fix.mp4")
             ff = FFmpegService()
             fex = ff.ffmpeg_path or "ffmpeg"
@@ -374,17 +373,17 @@ class BatchTaskManager:
 
             r = subprocess.run(
                 [fex, "-y", "-i", head_out,
-                 "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
-                 "-pix_fmt", "yuv420p", "-c:a", "aac",
+                 "-c", "copy", "-bsf:v", "h264_mp4toannexb",
                  "-movflags", "+faststart", head_fixed],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True, text=True, timeout=10,
                 creationflags=flags,
             )
             if r.returncode != 0:
-                os.remove(head_out)
+                try: os.remove(head_out)
+                except: pass
                 return self._compose_final_video_full(gif_path, mp3_path, output_path)
 
-            # Step 3: lossless concat — head_fixed + tail have matching codecs
+            # Step 3: lossless concat — both segments now have compatible bitstreams
             concat_list = os.path.join(self._cache_mgr._video_temp_dir,
                                        f"{safe_name}_clist.txt")
             with open(concat_list, "w", encoding="utf-8") as f:
