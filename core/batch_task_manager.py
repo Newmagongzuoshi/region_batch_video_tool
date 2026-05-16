@@ -381,10 +381,11 @@ class BatchTaskManager:
         codec = enc["codec"]
         # Quality flags (same as video_composer)
         qf = []
-        if "nvenc" in codec:    qf = ["-cq", "18", "-rc", "vbr", "-b_ref_mode", "middle"]
-        elif "amf" in codec:    qf = ["-qp_i", "18", "-qp_p", "20", "-quality", "quality"]
-        elif "qsv" in codec:    qf = ["-global_quality", "18"]
-        elif "mf" in codec:     qf = ["-q:v", "2"]
+        if "nvenc" in codec:    qf = ["-cq", "15", "-rc", "vbr", "-b_ref_mode", "middle",
+                                      "-spatial_aq", "1", "-temporal_aq", "1"]
+        elif "amf" in codec:    qf = ["-qp_i", "15", "-qp_p", "18", "-quality", "quality"]
+        elif "qsv" in codec:    qf = ["-global_quality", "15", "-look_ahead", "1"]
+        elif "mf" in codec:     qf = ["-q:v", "1"]
 
         flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         r = subprocess.run(

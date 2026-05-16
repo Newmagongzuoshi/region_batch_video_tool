@@ -229,7 +229,7 @@ class VideoComposer:
             ox = int(overlay_x)
             oy = int(overlay_y)
             if abs(overlay_scale - 1.0) > 0.01:
-                scale_filter = f"scale=iw*{overlay_scale}:ih*{overlay_scale},"
+                scale_filter = f"scale=iw*{overlay_scale}:ih*{overlay_scale}:flags=lanczos,"
             else:
                 scale_filter = ""
 
@@ -263,13 +263,14 @@ class VideoComposer:
             # Quality flags per encoder (prevents blurry GPU output)
             quality_flags = []
             if "nvenc" in enc_codec:
-                quality_flags = ["-cq", "18", "-rc", "vbr", "-b_ref_mode", "middle"]
+                quality_flags = ["-cq", "15", "-rc", "vbr", "-b_ref_mode", "middle",
+                                 "-spatial_aq", "1", "-temporal_aq", "1"]
             elif "amf" in enc_codec:
-                quality_flags = ["-qp_i", "18", "-qp_p", "20", "-quality", "quality"]
+                quality_flags = ["-qp_i", "15", "-qp_p", "18", "-quality", "quality"]
             elif "qsv" in enc_codec:
-                quality_flags = ["-global_quality", "18"]
+                quality_flags = ["-global_quality", "15", "-look_ahead", "1"]
             elif "mf" in enc_codec:
-                quality_flags = ["-q:v", "2"]
+                quality_flags = ["-q:v", "1"]
 
             cmd.extend([
                 "-t", duration_str,
