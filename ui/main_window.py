@@ -244,6 +244,14 @@ class MainWindow(QMainWindow):
         batch_page = self._pages["批量生成"]
         batch_page.set_manager(self._batch_manager)
         batch_page.set_output_dir(base)
+        # Show generation scheme
+        encoder = self._batch_manager._composer._encoder
+        batch_page.update_scheme_info(
+            encoder_desc=encoder["description"],
+            workers=self._batch_manager._worker_count,
+            use_split=self._batch_manager._use_split,
+            head_dur=self._batch_manager._gif_duration_s,
+        )
         batch_page.start_with_regions(
             [{"region": r.clean_name, "safe_filename": r.safe_filename}
              for r in self._regions]

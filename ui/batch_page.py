@@ -1,5 +1,8 @@
 import os
+import sys
 import time
+import platform
+import subprocess
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -11,6 +14,56 @@ from core.batch_task_manager import BatchTaskManager
 from utils.logger import get_logger
 
 logger = get_logger()
+
+
+def _collect_system_info() -> dict:
+    """Collect CPU/GPU/Memory info for display."""
+    info = {"cpu": "", "gpu": "", "memory": ""}
+
+    # CPU
+    cpu_name = platform.processor() or "Unknown"
+    cores = os.cpu_count() or 1
+    info["cpu"] = f"{cpu_name} ({cores} 核)"
+
+    # Memory
+    try:
+        import psutil
+        mem = psutil.virtual_memory()
+        info["memory"] = f"{mem.total / (1024**3):.1f} GB"
+    except ImportError:
+        try:
+            result = subprocess.run(
+                ["wmic", "computersystem", "get", "totalphysicalmemory"],
+                capture_output=True, text=True, timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            lines = result.stdout.strip().split()
+            if len(lines) >= 2:
+                total_bytes = int(lines[1])
+                info["memory"] = f"{total_bytes / (1024**3):.0f} GB"
+        except Exception:
+            info["memory"] = "未知"
+
+    # GPU
+    gpus = []
+    for cmd in [
+        ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+        ["wmic", "path", "win32_videocontroller", "get", "name"],
+    ]:
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            )
+            lines = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
+            if lines:
+                gpus.extend(lines[:2])
+                break
+        except Exception:
+            pass
+    info["gpu"] = " + ".join(gpus[:2]) if gpus else "未检测到独立显卡"
+
+    return info
 
 
 class BatchWorker(QThread):
@@ -78,6 +131,36 @@ class BatchPage(QWidget):
         desc.setStyleSheet("color: #7f8c8d; font-size: 13px;")
         layout.addWidget(desc)
 
+        # System info + generation scheme side by side
+        info_row = QHBoxLayout()
+
+        # 电脑配置
+        sys_info = _collect_system_info()
+        hw_group = QGroupBox("电脑配置")
+        hw_layout = QVBoxLayout(hw_group)
+        self._hw_cpu_label = QLabel(f"CPU: {sys_info['cpu']}")
+        self._hw_gpu_label = QLabel(f"GPU: {sys_info['gpu']}")
+        self._hw_mem_label = QLabel(f"内存: {sys_info['memory']}")
+        for lbl in [self._hw_cpu_label, self._hw_gpu_label, self._hw_mem_label]:
+            lbl.setStyleSheet("color: #2c3e50; font-size: 12px;")
+            lbl.setWordWrap(True)
+            hw_layout.addWidget(lbl)
+        info_row.addWidget(hw_group)
+
+        # 生成方案
+        plan_group = QGroupBox("生成方案")
+        plan_layout = QVBoxLayout(plan_group)
+        self._plan_encoder = QLabel("编码器: 等待初始化...")
+        self._plan_workers = QLabel("并发数: -")
+        self._plan_split = QLabel("视频分段: -")
+        for lbl in [self._plan_encoder, self._plan_workers, self._plan_split]:
+            lbl.setStyleSheet("color: #2c3e50; font-size: 12px;")
+            lbl.setWordWrap(True)
+            plan_layout.addWidget(lbl)
+        info_row.addWidget(plan_group)
+
+        layout.addLayout(info_row)
+
         # Status
         self._status_label = QLabel("点击「开始生成」启动批量处理")
         self._status_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #2c3e50;")
@@ -138,6 +221,15 @@ class BatchPage(QWidget):
 
     def set_manager(self, manager: BatchTaskManager):
         self._manager = manager
+
+    def update_scheme_info(self, encoder_desc: str, workers: int, use_split: bool, head_dur: float = 0):
+        """Update generation scheme display after initialization."""
+        self._plan_encoder.setText(f"编码器: {encoder_desc}")
+        self._plan_workers.setText(f"并发数: {workers} 线程")
+        if use_split:
+            self._plan_split.setText(f"视频分段: head({head_dur:.1f}s)+tail 复用模式")
+        else:
+            self._plan_split.setText("视频分段: 完整源编码模式")
 
     def start_with_regions(self, regions: list[dict]):
         if self._manager is None:
