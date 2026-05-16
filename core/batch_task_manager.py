@@ -93,12 +93,26 @@ class BatchTaskManager:
 
         self._gif_temp_dir = os.path.join(self._cache_mgr._video_temp_dir, "gif_temp")
         self._mp3_temp_dir = os.path.join(self._cache_mgr._audio_temp_dir, "mp3_temp")
-        # Clear old GIF cache — style changes would be ignored otherwise
-        if os.path.isdir(self._gif_temp_dir):
-            import shutil
-            shutil.rmtree(self._gif_temp_dir, ignore_errors=True)
         os.makedirs(self._gif_temp_dir, exist_ok=True)
         os.makedirs(self._mp3_temp_dir, exist_ok=True)
+
+        # Style hash for GIF cache key — different styles produce different hashes
+        import hashlib
+        tl = self._gif_text_layer
+        style_key = (
+            tl.fill_color, tl.stroke_color, str(tl.stroke_width),
+            getattr(tl, "stroke_mode", "outer"),
+            getattr(tl, "glow_enabled", False), getattr(tl, "glow_color", ""),
+            tl.font_family, str(tl.font_size), str(tl.weight),
+            str(tl.bold), str(tl.italic),
+            str(tl.shadow_enabled), tl.shadow_color, str(tl.shadow_opacity),
+            str(tl.gradient_enabled), tl.gradient_start, tl.gradient_end,
+            tl.text_template, str(getattr(tl, "vertical", False)),
+        )
+        self._style_hash = hashlib.md5(
+            "|".join(style_key).encode()
+        ).hexdigest()[:8]
+        logger.info(f"Style hash: {self._style_hash}")
         os.makedirs(self._output_video_dir, exist_ok=True)
         os.makedirs(self._report_dir, exist_ok=True)
 
@@ -202,7 +216,7 @@ class BatchTaskManager:
         region = r["region"]
         safe = r["safe_filename"]
         mp3_path = os.path.join(self._mp3_temp_dir, f"{safe}.mp3")
-        gif_path = os.path.join(self._gif_temp_dir, f"{safe}.gif")
+        gif_path = os.path.join(self._gif_temp_dir, f"{safe}_{self._style_hash}.gif")
 
         # TTS and GIF are independent — run them in parallel
         tts_needed = not (os.path.isfile(mp3_path) and os.path.getsize(mp3_path) > 100)
@@ -281,7 +295,7 @@ class BatchTaskManager:
         safe = r["safe_filename"]
 
         # --- Step 1: GIF ---
-        gif_path = os.path.join(self._gif_temp_dir, f"{safe}.gif")
+        gif_path = os.path.join(self._gif_temp_dir, f"{safe}_{self._style_hash}.gif")
         gif_ok = False
         if self._existing_file_policy == "skip" and os.path.isfile(gif_path) and os.path.getsize(gif_path) > 0:
             gif_ok = True
