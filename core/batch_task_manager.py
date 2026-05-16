@@ -159,17 +159,13 @@ class BatchTaskManager:
         # ---- Pre-generate all TTS in parallel ----
         logger.info(f"=== Pre-generating TTS for {total} regions ===")
         tts_engine = self._sapi_engine
-        use_edge = False
-        try:
-            edge = EdgeTTSEngine(self._ffmpeg.ffmpeg_path or "ffmpeg")
-            if edge.test_connection():
-                tts_engine = edge
-                use_edge = True
-                logger.info("TTS: Using Edge TTS (fast concurrent HTTP)")
-        except Exception:
-            pass
-        if not use_edge:
-            logger.info("TTS: Using Windows SAPI (may be slower)")
+        use_edge = isinstance(tts_engine, EdgeTTSEngine)
+        if use_edge:
+            logger.info(f"TTS: Edge TTS (voice={getattr(tts_engine, '_voice', '?')}) 24-thread concurrent")
+        elif tts_engine:
+            logger.info(f"TTS: {tts_engine.engine_name} 4-thread (serial-limited)")
+        else:
+            logger.warning("TTS: No engine available!")
 
         # Generate all MP3s concurrently
         tts_workers = min(total, 24 if use_edge else 4)  # Edge=unlimited, SAPI=limited

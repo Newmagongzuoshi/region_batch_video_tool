@@ -246,11 +246,14 @@ class MainWindow(QMainWindow):
         batch_page.set_output_dir(base)
         # Show generation scheme
         encoder = self._batch_manager._composer._encoder
+        tts_engine = self._batch_manager._sapi_engine
+        tts_desc = tts_engine.engine_name if tts_engine else "无"
         batch_page.update_scheme_info(
             encoder_desc=encoder["description"],
             workers=self._batch_manager._worker_count,
             use_split=self._batch_manager._use_split,
             head_dur=self._batch_manager._gif_duration_s,
+            tts_desc=tts_desc,
         )
         batch_page.start_with_regions(
             [{"region": r.clean_name, "safe_filename": r.safe_filename}

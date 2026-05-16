@@ -194,7 +194,8 @@ class BatchPage(QWidget):
         self._plan_encoder = QLabel("编码器: 等待初始化...")
         self._plan_workers = QLabel("并发数: -")
         self._plan_split = QLabel("视频分段: -")
-        for lbl in [self._plan_encoder, self._plan_workers, self._plan_split]:
+        self._plan_tts = QLabel("语音合成: -")
+        for lbl in [self._plan_encoder, self._plan_workers, self._plan_split, self._plan_tts]:
             lbl.setStyleSheet("color: #2c3e50; font-size: 12px;")
             lbl.setWordWrap(True)
             plan_layout.addWidget(lbl)
@@ -263,9 +264,8 @@ class BatchPage(QWidget):
     def set_manager(self, manager: BatchTaskManager):
         self._manager = manager
 
-    def update_scheme_info(self, encoder_desc: str, workers: int, use_split: bool, head_dur: float = 0):
+    def update_scheme_info(self, encoder_desc: str, workers: int, use_split: bool, head_dur: float = 0, tts_desc: str = ""):
         """Update generation scheme display after initialization."""
-        # Encoder ranking by speed
         rank_map = {
             "NVIDIA NVENC GPU": "① 最快",
             "AMD AMF GPU": "② 快",
@@ -279,6 +279,8 @@ class BatchPage(QWidget):
             self._plan_split.setText(f"视频分段: head({head_dur:.1f}s)+tail 复用模式")
         else:
             self._plan_split.setText("视频分段: 完整源编码模式")
+        if tts_desc:
+            self._plan_tts.setText(f"语音合成: {tts_desc}")
 
     def start_with_regions(self, regions: list[dict]):
         if self._manager is None:
