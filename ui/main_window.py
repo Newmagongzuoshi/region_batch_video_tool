@@ -227,9 +227,12 @@ class MainWindow(QMainWindow):
         voice_page = self._pages["语音设置"]
         tts_engine = voice_page.get_engine()
 
+        # Read current text layer directly from editor (not cached copy — may be stale)
+        current_text_layer = gif_page.get_text_layer()
+
         self._batch_manager.initialize(
             gif_decoder=gif_decoder,
-            text_layer=self._text_layer,
+            text_layer=current_text_layer,
             source_video_path=self._video_path,
             output_video_dir=video_dir,
             report_dir=video_dir,
