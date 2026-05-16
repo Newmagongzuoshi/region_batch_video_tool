@@ -152,6 +152,8 @@ class BatchTaskManager:
 
         total = len(regions)
         completed = 0
+        self._elapsed_sec = 0.0
+        t_start = time.time()
         logger.info(f"=== Pipeline: {total} regions, {self._worker_count} workers ===")
 
         with ThreadPoolExecutor(max_workers=self._worker_count) as ex:
@@ -171,6 +173,7 @@ class BatchTaskManager:
                 if on_progress:
                     on_progress("mp4", {"current": completed, "total": total})
 
+        self._elapsed_sec = time.time() - t_start
         self._write_report()
         logger.info("=== Pipeline done ===")
 
@@ -346,11 +349,32 @@ class BatchTaskManager:
         success = [r for r in self._results if r.get("mp4") == "ok"]
         failed = [r for r in self._results if r not in success]
 
+        # Collect system info
+        try:
+            from ui.batch_page import _collect_system_info
+            sys_info = _collect_system_info()
+        except Exception:
+            sys_info = {"cpu": "未知", "gpu": "未知", "memory": "未知"}
+
+        enc = self._composer._encoder
+        split_desc = f"head({self._gif_duration_s:.1f}s)+tail 复用" if self._use_split else "完整源编码"
+
         report_path = os.path.join(self._output_video_dir, "AA视频生成报告.txt")
         with open(report_path, "w", encoding="utf-8") as f:
             f.write(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"总计: {len(self._results)}  成功: {len(success)}  失败: {len(failed)}\n")
             f.write("=" * 40 + "\n\n")
+            f.write("【电脑配置】\n")
+            f.write(f"  CPU: {sys_info['cpu']}\n")
+            f.write(f"  GPU: {sys_info['gpu']}\n")
+            f.write(f"  内存: {sys_info['memory']}\n")
+            f.write(f"\n【生成方案】\n")
+            f.write(f"  编码器: {enc['description']} ({enc['codec']})\n")
+            f.write(f"  并发数: {self._worker_count} 线程\n")
+            f.write(f"  视频分段: {split_desc}\n")
+            avg_str = f"{self._elapsed_sec / len(success):.1f} 秒/个" if success else "N/A"
+            f.write(f"  总耗时: {self._elapsed_sec:.0f} 秒  |  平均: {avg_str}\n")
+            f.write(f"\n" + "=" * 40 + "\n")
             f.write("【成功】\n")
             for r in success:
                 f.write(f"  OK  {r['region']}.mp4\n")
