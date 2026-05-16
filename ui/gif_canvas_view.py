@@ -84,7 +84,7 @@ class GifCanvasView(QGraphicsView):
                 self._bg_pixmap_item = None
             self._preview_mode = False
             self._bg_mode = "checkerboard"
-            # Disable GIF dragging, re-enable text dragging
+            # Exit preview: GIF stays non-movable, text stays draggable
             if self._gif_item:
                 self._gif_item.setFlag(QGraphicsPixmapItem.GraphicsItemFlag.ItemIsMovable, False)
                 self._gif_item.setCursor(Qt.CursorShape.ArrowCursor)
@@ -105,12 +105,12 @@ class GifCanvasView(QGraphicsView):
                 br = self._scene.sceneRect()
                 pm_rect = QRectF(pm.rect())
                 self._scene.setSceneRect(br.united(pm_rect))
-            # Enable GIF dragging, disable text dragging (so clicks pass through to GIF)
+            # In preview: both GIF and text are draggable
             if self._gif_item and not self._gif_locked:
                 self._gif_item.setFlag(QGraphicsPixmapItem.GraphicsItemFlag.ItemIsMovable, True)
                 self._gif_item.setCursor(Qt.CursorShape.SizeAllCursor)
             if self._draggable_text:
-                self._draggable_text.set_locked(True)
+                self._draggable_text.set_locked(False)
 
         self.viewport().update()
 

@@ -1,5 +1,5 @@
-"""Font manager: scan system fonts, provide advanced font lists with grouping,
-search, recent tracking, and fallback chain. Does NOT embed font files."""
+"""Font manager: scan system fonts + built-in fonts, provide advanced font
+lists with grouping, search, recent tracking, and fallback chain."""
 
 from __future__ import annotations
 
@@ -21,14 +21,17 @@ logger = get_logger()
 @dataclass
 class FontInfo:
     family: str
-    path: str | None = None       # full path to font file, or None if not installed
-    installed: bool = False
+    path: str | None = None       # full path to font file, or None if not available
+    installed: bool = False        # True = system-installed or built-in
+    built_in: bool = False         # True = shipped with the app
     category: str = "系统字体"
     preview_text: str = ""
 
     @property
     def display_name(self) -> str:
-        return self.family + ("" if self.installed else " [未安装]")
+        if self.installed:
+            return self.family + (" [内置]" if self.built_in else "")
+        return self.family + " [未安装]"
 
 
 # ---------------------------------------------------------------------------
@@ -39,33 +42,29 @@ _ADVANCED_BLACK_FONTS = [
     ("Microsoft YaHei", "微软雅黑"),
     ("Microsoft YaHei UI", "微软雅黑 UI"),
     ("SimHei", "黑体"),
+    ("SourceHanSansSC-Regular", "思源黑体"),
+    ("SourceHanSansSC-Bold", "思源黑体 Bold"),
+    ("SourceHanSansSC-Heavy", "思源黑体 Heavy"),
+    ("LXGWWenKai-Regular", "霞鹜文楷"),
+    ("NotoSansSC-Regular", "Noto 思源黑体 SC"),
     ("PingFang SC", "苹方"),
-    ("Noto Sans CJK SC", "Noto 思源黑体"),
-    ("Source Han Sans SC", "思源黑体"),
-    ("Source Han Sans CN", "思源黑体 CN"),
     ("HarmonyOS Sans", "鸿蒙字体"),
     ("OPPO Sans", "OPPO 字体"),
     ("Alibaba PuHuiTi", "阿里巴巴普惠体"),
     ("MiSans", "小米 MiSans"),
-    ("LXGW Neo XiHei", "霞鹜新晰黑"),
-    ("WenQuanYi Micro Hei", "文泉驿微米黑"),
 ]
 
 _BUSINESS_TITLE_FONTS = [
-    ("Source Han Sans SC Medium", "思源黑体 Medium"),
-    ("Source Han Sans SC Bold", "思源黑体 Bold"),
+    ("SourceHanSansSC-Bold", "思源黑体 Bold"),
+    ("SourceHanSansSC-Heavy", "思源黑体 Heavy"),
+    ("LXGWWenKai-Regular", "霞鹜文楷"),
     ("Alibaba PuHuiTi 2.0", "阿里巴巴普惠体 2.0"),
     ("HarmonyOS Sans Medium", "鸿蒙字体 Medium"),
     ("HarmonyOS Sans Bold", "鸿蒙字体 Bold"),
-    ("Noto Sans SC Medium", "Noto 黑体 Medium"),
-    ("Noto Sans SC Bold", "Noto 黑体 Bold"),
 ]
 
 _PREMIUM_SERIF_FONTS = [
-    ("Source Han Serif SC", "思源宋体"),
-    ("Source Han Serif CN", "思源宋体 CN"),
-    ("Noto Serif CJK SC", "Noto 宋体"),
-    ("Noto Serif SC", "Noto 宋体 SC"),
+    ("LXGWWenKai-Regular", "霞鹜文楷"),
     ("SimSun", "宋体"),
     ("NSimSun", "新宋体"),
     ("FangSong", "仿宋"),
@@ -76,14 +75,12 @@ _PREMIUM_SERIF_FONTS = [
 ]
 
 _SHORT_VIDEO_TITLE_FONTS = [
-    ("Microsoft YaHei Bold", "微软雅黑 Bold"),
+    ("Microsoft YaHei", "微软雅黑 Bold"),
     ("SimHei", "黑体"),
-    ("Source Han Sans SC Heavy", "思源黑体 Heavy"),
-    ("Noto Sans SC Black", "Noto 黑体 Black"),
+    ("SourceHanSansSC-Heavy", "思源黑体 Heavy"),
+    ("SourceHanSansSC-Bold", "思源黑体 Bold"),
     ("Alibaba PuHuiTi Heavy", "阿里巴巴普惠体 Heavy"),
     ("HarmonyOS Sans Bold", "鸿蒙字体 Bold"),
-    ("MiSans Heavy", "小米 MiSans Heavy"),
-    ("OPPO Sans Heavy", "OPPO 字体 Heavy"),
 ]
 
 _TECH_FONTS = [
@@ -116,7 +113,14 @@ _MINIMAL_EN_FONTS = [
 
 # All special font groups (name → display name)
 _ALL_GROUPS: dict[str, list[tuple[str, str]]] = {
-    "推荐字体": _ADVANCED_BLACK_FONTS[:6],
+    "推荐字体": [
+        ("Microsoft YaHei", "微软雅黑"),
+        ("SimHei", "黑体"),
+        ("SourceHanSansSC-Bold", "思源黑体 Bold"),
+        ("SourceHanSansSC-Regular", "思源黑体"),
+        ("LXGWWenKai-Regular", "霞鹜文楷"),
+        ("NotoSansSC-Regular", "Noto 黑体 SC"),
+    ],
     "中文高级黑体": _ADVANCED_BLACK_FONTS,
     "商务标题字体": _BUSINESS_TITLE_FONTS,
     "短视频标题字体": _SHORT_VIDEO_TITLE_FONTS,
@@ -138,8 +142,10 @@ for _glist in _ALL_GROUPS.values():
 
 class FontManager:
     def __init__(self):
-        self._system_fonts: dict[str, str] = {}  # family → path
+        self._system_fonts: dict[str, str] = {}  # family → path (system-installed)
+        self._builtin_fonts: dict[str, str] = {}  # family → path (bundled with app)
         self._scan_system()
+        self._scan_builtin()
         self._recent: list[str] = []
         self._load_recent()
 
@@ -156,12 +162,28 @@ class FontManager:
                 if lower.endswith((".ttf", ".ttc", ".otf")):
                     name = os.path.splitext(f)[0]
                     path = os.path.join(font_dir, f)
-                    # Store under the exact filename stem
                     self._system_fonts[name] = path
-                    # Also store under common aliases
                     self._add_aliases(name, path)
         except Exception as e:
             logger.error(f"Font scan error: {e}")
+
+    def _scan_builtin(self):
+        """Scan bundled fonts in assets/fonts/."""
+        builtin_dir = resolve_path("assets", "fonts")
+        if not os.path.isdir(builtin_dir):
+            return
+        try:
+            for f in os.listdir(builtin_dir):
+                lower = f.lower()
+                if lower.endswith((".ttf", ".ttc", ".otf")):
+                    name = os.path.splitext(f)[0]
+                    path = os.path.join(builtin_dir, f)
+                    self._builtin_fonts[name] = path
+                    logger.debug(f"Built-in font: {name}")
+            if self._builtin_fonts:
+                logger.info(f"Loaded {len(self._builtin_fonts)} built-in fonts")
+        except Exception as e:
+            logger.error(f"Built-in font scan error: {e}")
 
     def _add_aliases(self, name: str, path: str):
         """Add common font aliases."""
@@ -205,7 +227,16 @@ class FontManager:
         return self._system_fonts.get(family)
 
     def is_installed(self, family: str) -> bool:
-        return family in self._system_fonts
+        return family in self._system_fonts or family in self._builtin_fonts
+
+    # ---- query ----
+
+    def get_font_path(self, family: str) -> str | None:
+        """Return full path to font file (system or built-in), or None."""
+        return self._system_fonts.get(family) or self._builtin_fonts.get(family)
+
+    def is_builtin(self, family: str) -> bool:
+        return family in self._builtin_fonts and family not in self._system_fonts
 
     # ---- fallback ----
 
@@ -216,24 +247,23 @@ class FontManager:
 
     def get_fallback(self, family: str) -> str:
         """Return the first available font in the fallback chain."""
-        # First, try the original family
         if self.is_installed(family):
             return family
-        # Then try fallback chain
         for fb in self.FALLBACK_CHAIN:
             if self.is_installed(fb):
                 return fb
-        # Last resort: any system font
-        if self._system_fonts:
-            return next(iter(self._system_fonts))
-        return "Arial"  # should never happen on Windows
+        all_fonts = {**self._builtin_fonts, **self._system_fonts}
+        if all_fonts:
+            return next(iter(all_fonts))
+        return "Arial"
 
     def get_effective_font(self, family: str) -> tuple[str, str | None]:
         """Return (effective_family, font_path) — always succeeds."""
-        if self.is_installed(family):
-            return family, self._system_fonts[family]
+        path = self.get_font_path(family)
+        if path:
+            return family, path
         fb = self.get_fallback(family)
-        return fb, self._system_fonts.get(fb)
+        return fb, self.get_font_path(fb)
 
     # ---- groups ----
 
@@ -251,10 +281,12 @@ class FontManager:
             infos: list[FontInfo] = []
             for family, display in font_list:
                 installed = self.is_installed(family)
+                built_in = self.is_builtin(family)
                 infos.append(FontInfo(
                     family=family,
-                    path=self._system_fonts.get(family),
+                    path=self.get_font_path(family),
                     installed=installed,
+                    built_in=built_in,
                     category=group_name,
                     preview_text=display if not installed else family,
                 ))

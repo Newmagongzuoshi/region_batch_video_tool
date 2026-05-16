@@ -32,52 +32,49 @@ logger = get_logger()
 
 # ---- Presets ----
 PRESET_LIST: list[tuple[str, str]] = [
-    ("preset_yellow_black", "黄字黑边"),
+    ("preset_yellow_black", "金字黑边"),
     ("preset_white_black", "白字黑边"),
     ("preset_red_white", "红字白边"),
+    ("preset_blue_cyan", "蓝字青光"),
+    ("preset_red_gold", "红字金边"),
     ("preset_black_white_bg", "黑字白底"),
-    ("preset_white_black_bg", "白字黑底"),
-    ("preset_red_white_bg", "红底白字"),
     ("preset_factory_ad", "工厂广告标题"),
     ("preset_contact", "联系方式"),
 ]
 
 PRESET_STYLES: dict[str, dict] = {
     "preset_yellow_black": {"font_size": 72, "bold": True, "fill_color": "#FFD700",
-        "stroke_enabled": True, "stroke_color": "#000000", "stroke_width": 8,
-        "shadow_enabled": True, "shadow_color": "#000000", "shadow_opacity": 0.5,
-        "shadow_offset_x": 3, "shadow_offset_y": 3, "shadow_blur": 4,
-        "background_enabled": False, "border_enabled": False},
+        "stroke_enabled": True, "stroke_color": "#000000", "stroke_width": 6, "stroke_mode": "double",
+        "glow_enabled": True, "glow_color": "#FFFF88", "glow_width": 2,
+        "shadow_enabled": False, "background_enabled": False, "border_enabled": False},
     "preset_white_black": {"font_size": 72, "bold": True, "fill_color": "#FFFFFF",
-        "stroke_enabled": True, "stroke_color": "#000000", "stroke_width": 6,
-        "shadow_enabled": True, "shadow_color": "#000000", "shadow_opacity": 0.4,
-        "shadow_offset_x": 2, "shadow_offset_y": 2, "shadow_blur": 3,
-        "background_enabled": False, "border_enabled": False},
+        "stroke_enabled": True, "stroke_color": "#000000", "stroke_width": 4, "stroke_mode": "double",
+        "glow_enabled": True, "glow_color": "#CCCCCC", "glow_width": 1,
+        "shadow_enabled": False, "background_enabled": False, "border_enabled": False},
     "preset_red_white": {"font_size": 70, "bold": True, "fill_color": "#FF3333",
-        "stroke_enabled": True, "stroke_color": "#FFFFFF", "stroke_width": 5,
+        "stroke_enabled": True, "stroke_color": "#FFFFFF", "stroke_width": 4, "stroke_mode": "glow",
+        "shadow_enabled": False, "background_enabled": False, "border_enabled": False},
+    "preset_blue_cyan": {"font_size": 68, "bold": True, "fill_color": "#0077DD",
+        "stroke_enabled": True, "stroke_color": "#00CCFF", "stroke_width": 2, "stroke_mode": "glow",
+        "shadow_enabled": False, "gradient_enabled": True,
+        "gradient_start": "#0044CC", "gradient_end": "#00AAFF",
+        "background_enabled": False, "border_enabled": False},
+    "preset_red_gold": {"font_size": 66, "bold": True, "fill_color": "#FF4422",
+        "stroke_enabled": True, "stroke_color": "#CC3300", "stroke_width": 5, "stroke_mode": "double",
+        "glow_enabled": True, "glow_color": "#FFDD66", "glow_width": 2,
         "shadow_enabled": False, "background_enabled": False, "border_enabled": False},
     "preset_black_white_bg": {"font_size": 56, "bold": True, "fill_color": "#000000",
         "stroke_enabled": False, "shadow_enabled": False,
         "background_enabled": True, "background_color": "#FFFFFF", "background_opacity": 0.85,
         "background_radius": 8, "background_padding": 10, "border_enabled": False},
-    "preset_white_black_bg": {"font_size": 60, "bold": True, "fill_color": "#FFFFFF",
-        "stroke_enabled": True, "stroke_color": "#000000", "stroke_width": 3,
-        "shadow_enabled": False,
-        "background_enabled": True, "background_color": "#000000", "background_opacity": 0.7,
-        "background_radius": 8, "background_padding": 10, "border_enabled": False},
-    "preset_red_white_bg": {"font_size": 64, "bold": True, "fill_color": "#FFFFFF",
-        "stroke_enabled": True, "stroke_color": "#CC0000", "stroke_width": 4,
-        "shadow_enabled": False,
-        "background_enabled": True, "background_color": "#FF0000", "background_opacity": 0.9,
-        "background_radius": 6, "background_padding": 12, "border_enabled": False},
     "preset_factory_ad": {"font_size": 68, "bold": True, "fill_color": "#FFD700",
-        "stroke_enabled": True, "stroke_color": "#FF0000", "stroke_width": 6,
-        "shadow_enabled": True, "shadow_color": "#990000", "shadow_opacity": 0.6,
-        "shadow_offset_x": 4, "shadow_offset_y": 4, "shadow_blur": 5,
+        "stroke_enabled": True, "stroke_color": "#CC0000", "stroke_width": 6, "stroke_mode": "double",
+        "glow_enabled": True, "glow_color": "#FFFF88", "glow_width": 2,
+        "shadow_enabled": False,
         "background_enabled": True, "background_color": "#000000", "background_opacity": 0.5,
-        "background_radius": 10, "background_padding": 14, "border_enabled": False},
+        "background_radius": 8, "background_padding": 12, "border_enabled": False},
     "preset_contact": {"font_size": 48, "bold": False, "fill_color": "#FFFFFF",
-        "stroke_enabled": True, "stroke_color": "#333333", "stroke_width": 3,
+        "stroke_enabled": True, "stroke_color": "#333333", "stroke_width": 3, "stroke_mode": "outer",
         "shadow_enabled": False,
         "background_enabled": True, "background_color": "#000000", "background_opacity": 0.55,
         "background_radius": 6, "background_padding": 8, "border_enabled": False},
@@ -89,10 +86,14 @@ BTN_CHECKED_STYLE = (
     "padding: 3px 10px; border-radius: 3px; font-size: 11px; }"
 )
 BTN_UNCHECKED_STYLE = (
-    "QPushButton { background: #fff; color: #555; border: 1px solid #dcdde1; "
+    "QPushButton { background: #fff; color: #333; border: 1px solid #dcdde1; "
     "padding: 3px 10px; border-radius: 3px; font-size: 11px; }"
-    "QPushButton:hover { background: #ecf0f1; }"
+    "QPushButton:hover { background: #ecf0f1; color: #333; }"
 )
+
+# Base style for all white-background elements — ensures dark text regardless of system theme
+_BASE_WHITE_BG = "background: #fff; color: #333;"
+_BASE_INPUT_STYLE = "background: #fff; color: #333; border: 1px solid #dcdde1; border-radius: 3px; padding: 2px 4px;"
 
 FONT_DIR = "C:/Windows/Fonts"
 _SYSTEM_FONTS: dict[str, str] = {}
@@ -159,7 +160,7 @@ class GifEditorPage(QWidget):
         # Persistent overlay position (survives preview on/off)
         self._overlay_x: int = 0
         self._overlay_y: int = 0
-        self._overlay_scale: float = 1.0
+        self._overlay_scale: float = 1.685
 
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -389,7 +390,7 @@ class GifEditorPage(QWidget):
         self._text_tmpl_edit = QLineEdit(self._text_layer.text_template)
         self._text_tmpl_edit.setPlaceholderText("支持多行 / 变量 {地区}")
         self._text_tmpl_edit.textChanged.connect(self._on_text_changed)
-        self._text_tmpl_edit.setStyleSheet("QLineEdit { padding: 4px 6px; border: 1px solid #dcdde1; border-radius: 3px; font-size: 12px; }")
+        self._text_tmpl_edit.setStyleSheet("QLineEdit { padding: 4px 6px; border: 1px solid #dcdde1; border-radius: 3px; font-size: 12px; background: #fff; color: #333; }")
         c_lo.addWidget(self._text_tmpl_edit)
         btn_row = QHBoxLayout()
         add_btn = QPushButton("+ 添加到 GIF")
@@ -417,7 +418,7 @@ class GifEditorPage(QWidget):
         self._font_btn = QPushButton(self._text_layer.font_family)
         self._font_btn.setStyleSheet(
             "QPushButton { text-align: left; padding: 4px 8px; border: 1px solid #dcdde1; "
-            "border-radius: 3px; background: #fff; font-size: 11px; }"
+            "border-radius: 3px; background: #fff; color: #333; font-size: 11px; }"
             "QPushButton:hover { border-color: #3498db; }"
         )
         self._font_btn.clicked.connect(self._open_font_picker)
@@ -439,12 +440,38 @@ class GifEditorPage(QWidget):
         f2_row.addStretch()
         f_lo.addLayout(f2_row)
 
+        # Bold / Italic quick toggles
+        bi_row = QHBoxLayout(); bi_row.setSpacing(4)
+        bi_row.addWidget(_styled_label("样式"))
+        self._bold_btn = QPushButton("B")
+        self._bold_btn.setCheckable(True)
+        self._bold_btn.setChecked(self._text_layer.bold)
+        self._bold_btn.setFixedSize(30, 22)
+        self._bold_btn.setStyleSheet(
+            "QPushButton { font-weight: bold; font-size: 12px; border: 1px solid #dcdde1; "
+            "border-radius: 3px; background: #fff; color: #333; } QPushButton:checked { background: #3498db; color: #fff; }"
+        )
+        self._bold_btn.clicked.connect(self._on_bold_toggled)
+        bi_row.addWidget(self._bold_btn)
+        self._italic_btn = QPushButton("I")
+        self._italic_btn.setCheckable(True)
+        self._italic_btn.setChecked(self._text_layer.italic)
+        self._italic_btn.setFixedSize(30, 22)
+        self._italic_btn.setStyleSheet(
+            "QPushButton { font-style: italic; font-size: 12px; border: 1px solid #dcdde1; "
+            "border-radius: 3px; background: #fff; color: #333; } QPushButton:checked { background: #3498db; color: #fff; }"
+        )
+        self._italic_btn.clicked.connect(self._on_italic_toggled)
+        bi_row.addWidget(self._italic_btn)
+        bi_row.addStretch()
+        f_lo.addLayout(bi_row)
+
         # Quick size buttons
         qs_row = QHBoxLayout(); qs_row.setSpacing(2)
-        for sz in [24, 36, 48, 60, 72, 96, 120, 150, 180]:
+        for sz in [24, 36, 42, 54, 60, 72, 96, 120, 150, 180]:
             btn = QPushButton(str(sz))
             btn.setFixedSize(32, 18)
-            btn.setStyleSheet("QPushButton { font-size: 9px; padding: 0; border: 1px solid #dcdde1; border-radius: 2px; background: #fff; } QPushButton:hover { background: #3498db; color: #fff; }")
+            btn.setStyleSheet("QPushButton { font-size: 9px; padding: 0; border: 1px solid #dcdde1; border-radius: 2px; background: #fff; color: #333; } QPushButton:hover { background: #3498db; color: #fff; }")
             btn.clicked.connect(lambda checked, s=sz: self._set_font_size(s))
             qs_row.addWidget(btn)
         qs_row.addStretch()
@@ -458,7 +485,7 @@ class GifEditorPage(QWidget):
         fc_row.addWidget(self._fill_color_btn)
         fc_row.addStretch()
         palette_btn = QPushButton("▾ 色板")
-        palette_btn.setStyleSheet("QPushButton { font-size: 10px; padding: 2px 6px; border: 1px solid #dcdde1; border-radius: 3px; background: #fff; } QPushButton:hover { background: #ecf0f1; }")
+        palette_btn.setStyleSheet("QPushButton { font-size: 10px; padding: 2px 6px; border: 1px solid #dcdde1; border-radius: 3px; background: #fff; color: #333; } QPushButton:hover { background: #ecf0f1; }")
         palette_btn.clicked.connect(self._show_color_palette)
         fc_row.addWidget(palette_btn)
         f_lo.addLayout(fc_row)
@@ -482,6 +509,11 @@ class GifEditorPage(QWidget):
             btn.clicked.connect(lambda checked, a=ak: self._on_align(a))
             self._align_btns[ak] = btn; align_row.addWidget(btn)
         self._align_btns["center"].setChecked(True)
+        # Vertical text checkbox
+        self._vertical_cb = QCheckBox("竖向")
+        self._vertical_cb.setChecked(False)
+        self._vertical_cb.toggled.connect(self._on_vertical_toggled)
+        align_row.addWidget(self._vertical_cb)
         align_row.addStretch()
         f_lo.addLayout(align_row)
         panel_layout.addWidget(font_group)
@@ -546,18 +578,18 @@ class GifEditorPage(QWidget):
         self._grad_dir_row.addWidget(self._grad_dir_combo, 1)
         grad_lo.addLayout(self._grad_dir_row)
 
-        # Preset gradients (3-stop)
+        # Preset gradients (3-stop) matching real-world analysis
         PRESET_GRADIENTS: list[tuple[str, str, str, str]] = [
-            ("金橙高亮", "#FF9A00", "#FFC83D", "#FFF3A3"),
-            ("红金吸睛", "#D62828", "#F77F00", "#FFD166"),
-            ("蓝紫流光", "#3A0CA3", "#4361EE", "#4CC9F0"),
-            ("玫红橙亮", "#FF006E", "#FB5607", "#FFBE0B"),
-            ("青蓝高亮", "#00C2FF", "#00E5FF", "#A0F8FF"),
-            ("紫粉高亮", "#7B2CBF", "#C77DFF", "#FFD6FF"),
-            ("黄白高亮", "#F4B400", "#FFD84D", "#FFF6BF"),
-            ("绿色活力", "#00B894", "#00CEC9", "#81ECEC"),
-            ("橙红爆款", "#FF512F", "#F09819", "#FFE259"),
-            ("蓝白清爽", "#007CF0", "#00DFD8", "#FFFFFF"),
+            ("蓝青新闻", "#0044CC", "#0088EE", "#66DDFF"),
+            ("红金促销", "#CC0000", "#FF6600", "#FFD700"),
+            ("金字经典", "#C88800", "#FFD700", "#FFEE88"),
+            ("玫红娱乐", "#CC0066", "#FF3399", "#FFAAD4"),
+            ("橙红爆款", "#FF3300", "#FF6600", "#FFCC00"),
+            ("青蓝清爽", "#0077CC", "#00AADD", "#88EEFF"),
+            ("紫粉吸睛", "#6600CC", "#CC44FF", "#FFAAFF"),
+            ("绿金活力", "#009944", "#00CC66", "#CCFF88"),
+            ("红白渐变", "#FF0000", "#FF6666", "#FFFFFF"),
+            ("白金高端", "#FFFFFF", "#FFEECC", "#FFD700"),
         ]
         gpreset_grid = QGridLayout(); gpreset_grid.setSpacing(2)
         for i, (gname, gs, gm, ge) in enumerate(PRESET_GRADIENTS):
@@ -576,44 +608,102 @@ class GifEditorPage(QWidget):
         panel_layout.addWidget(grad_group)
 
         # ---------------------------------------------------------------
-        # STROKE
+        # STROKE (redesigned with glow + double-layer support)
         # ---------------------------------------------------------------
         stroke_group = _styled_group("描边")
         s_lo = QVBoxLayout(stroke_group); s_lo.setSpacing(4)
-        s_enable_row = QHBoxLayout()
-        self._stroke_cb = QCheckBox("启用描边"); self._stroke_cb.setChecked(True)
-        self._stroke_cb.toggled.connect(self._on_style_changed)
-        s_enable_row.addWidget(self._stroke_cb); s_enable_row.addStretch()
-        s_lo.addLayout(s_enable_row)
+
+        # Stroke mode selector
+        sm_row = QHBoxLayout(); sm_row.setSpacing(6)
+        sm_row.addWidget(_styled_label("模式"))
+        self._stroke_mode_combo = QComboBox()
+        self._stroke_mode_combo.addItems(["无描边", "深色描边", "浅色高光", "双层描边"])
+        self._stroke_mode_combo.setCurrentIndex(1)  # 深色描边
+        self._stroke_mode_combo.currentIndexChanged.connect(self._on_stroke_mode_changed)
+        sm_row.addWidget(self._stroke_mode_combo, 1)
+        s_lo.addLayout(sm_row)
+
+        # Dark stroke params
+        self._stroke_params_widget = QWidget()
+        sp_lo = QVBoxLayout(self._stroke_params_widget); sp_lo.setContentsMargins(0, 0, 0, 0); sp_lo.setSpacing(4)
         s_color_row = QHBoxLayout(); s_color_row.setSpacing(6)
         s_color_row.addWidget(_styled_label("颜色"))
         self._stroke_color_btn = _color_btn(self._text_layer.stroke_color, 48)
         self._stroke_color_btn.clicked.connect(lambda: self._pick_color("stroke"))
         s_color_row.addWidget(self._stroke_color_btn)
-        s_color_row.addSpacing(6)
-        s_color_row.addWidget(_styled_label("粗细")); self._stroke_width_spin = _spin(0, 30, 8, 74)
+        s_color_row.addSpacing(4)
+        s_color_row.addWidget(_styled_label("粗细")); self._stroke_width_spin = _spin(1, 20, 6, 70)
         self._stroke_width_spin.valueChanged.connect(self._on_style_changed)
         s_color_row.addWidget(self._stroke_width_spin); s_color_row.addWidget(_styled_label("px"))
         s_color_row.addStretch()
-        s_lo.addLayout(s_color_row)
-
-        # Stroke opacity
+        sp_lo.addLayout(s_color_row)
         sop_row = QHBoxLayout(); sop_row.setSpacing(6)
         sop_row.addWidget(_styled_label("不透明度"))
         self._stroke_opacity_sl = QSlider(Qt.Orientation.Horizontal)
-        self._stroke_opacity_sl.setRange(5, 100)
-        self._stroke_opacity_sl.setValue(100)
+        self._stroke_opacity_sl.setRange(5, 100); self._stroke_opacity_sl.setValue(100)
         self._stroke_opacity_sl.valueChanged.connect(self._on_style_changed)
         sop_row.addWidget(self._stroke_opacity_sl, 1)
-        s_lo.addLayout(sop_row)
+        sp_lo.addLayout(sop_row)
+        s_lo.addWidget(self._stroke_params_widget)
+
+        # Glow params (only visible in double / glow mode)
+        self._glow_params_widget = QWidget()
+        self._glow_params_widget.setVisible(False)
+        gp_lo = QVBoxLayout(self._glow_params_widget); gp_lo.setContentsMargins(0, 0, 0, 0); gp_lo.setSpacing(4)
+        gp_sep = QLabel("─ 高光层 ─"); gp_sep.setStyleSheet("color: #888; font-size: 10px;")
+        gp_sep.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        gp_lo.addWidget(gp_sep)
+        g_color_row = QHBoxLayout(); g_color_row.setSpacing(6)
+        g_color_row.addWidget(_styled_label("颜色"))
+        self._glow_color_btn = _color_btn(self._text_layer.glow_color, 48)
+        self._glow_color_btn.clicked.connect(lambda: self._pick_color("glow"))
+        g_color_row.addWidget(self._glow_color_btn)
+        g_color_row.addSpacing(4)
+        g_color_row.addWidget(_styled_label("粗细")); self._glow_width_spin = _spin(1, 10, 2, 70)
+        self._glow_width_spin.valueChanged.connect(self._on_style_changed)
+        g_color_row.addWidget(self._glow_width_spin); g_color_row.addWidget(_styled_label("px"))
+        g_color_row.addStretch()
+        gp_lo.addLayout(g_color_row)
+        gop_row = QHBoxLayout(); gop_row.setSpacing(6)
+        gop_row.addWidget(_styled_label("不透明度"))
+        self._glow_opacity_sl = QSlider(Qt.Orientation.Horizontal)
+        self._glow_opacity_sl.setRange(5, 100); self._glow_opacity_sl.setValue(80)
+        self._glow_opacity_sl.valueChanged.connect(self._on_style_changed)
+        gop_row.addWidget(self._glow_opacity_sl, 1)
+        gp_lo.addLayout(gop_row)
+        s_lo.addWidget(self._glow_params_widget)
+
+        # Stroke presets
+        spresets_label = QLabel("描边预设:")
+        spresets_label.setStyleSheet("color: #7f8c8d; font-size: 10px;")
+        s_lo.addWidget(spresets_label)
+        SP_GRID = QHBoxLayout(); SP_GRID.setSpacing(3)
+        STROKE_PRESETS: list[tuple[str, str, int, str, int]] = [
+            ("金字黑边", "#000000", 6, "#FFFF88", 2),
+            ("红字白边", "#FFFFFF", 4, "", 0),
+            ("白字黑边", "#000000", 4, "", 0),
+            ("蓝字青光", "#0099DD", 3, "#AAEEFF", 2),
+            ("红字金光", "#993300", 4, "#FFDD88", 2),
+        ]
+        for sp_name, sc, sw, gc, gw in STROKE_PRESETS:
+            btn = QPushButton(sp_name)
+            btn.setToolTip(f"{sp_name}: stroke={sc} {sw}px")
+            btn.setStyleSheet(
+                "QPushButton { font-size: 10px; padding: 2px 6px; border: 1px solid #dcdde1; "
+                "border-radius: 3px; background: #fff; color: #333; } QPushButton:hover { background: #e67e22; color: #fff; }"
+            )
+            btn.clicked.connect(lambda checked, c=sc, w=sw, gc=gc, gw=gw:
+                                self._apply_stroke_preset(c, w, gc, gw))
+            SP_GRID.addWidget(btn)
+        s_lo.addLayout(SP_GRID)
         panel_layout.addWidget(stroke_group)
 
         # ---------------------------------------------------------------
-        # SHADOW
+        # SHADOW (weakened defaults, added presets)
         # ---------------------------------------------------------------
         shadow_group = _styled_group("阴影")
         sh_lo = QVBoxLayout(shadow_group); sh_lo.setSpacing(4)
-        self._shadow_cb = QCheckBox("启用阴影"); self._shadow_cb.setChecked(True)
+        self._shadow_cb = QCheckBox("启用阴影"); self._shadow_cb.setChecked(False)
         self._shadow_cb.toggled.connect(self._on_style_changed)
         sh_lo.addWidget(self._shadow_cb)
         sh_c_row = QHBoxLayout(); sh_c_row.setSpacing(6)
@@ -633,10 +723,33 @@ class GifEditorPage(QWidget):
         sh_off_row.addWidget(_styled_label("Y")); self._shadow_y_spin = _spin(-50, 50, 3, 70)
         self._shadow_y_spin.valueChanged.connect(self._on_style_changed); sh_off_row.addWidget(self._shadow_y_spin)
         sh_off_row.addSpacing(2)
-        sh_off_row.addWidget(_styled_label("模糊")); self._shadow_blur_spin = _spin(0, 50, 4, 70)
+        sh_off_row.addWidget(_styled_label("模糊")); self._shadow_blur_spin = _spin(0, 50, 0, 70)
         self._shadow_blur_spin.valueChanged.connect(self._on_style_changed); sh_off_row.addWidget(self._shadow_blur_spin)
         sh_off_row.addStretch()
         sh_lo.addLayout(sh_off_row)
+
+        # Shadow presets
+        shpresets_label = QLabel("阴影预设:")
+        shpresets_label.setStyleSheet("color: #7f8c8d; font-size: 10px;")
+        sh_lo.addWidget(shpresets_label)
+        SHP_GRID = QHBoxLayout(); SHP_GRID.setSpacing(3)
+        SHADOW_PRESETS: list[tuple[str, int, int, int, int]] = [
+            ("无阴影", 0, 0, 0, 0),
+            ("柔和投影", 2, 3, 4, 30),
+            ("硬投影", 3, 3, 0, 60),
+            ("右下投影", 6, 6, 2, 40),
+            ("发光投影", 0, 0, 8, 50),
+        ]
+        for shp_name, sx, sy, sb, so in SHADOW_PRESETS:
+            btn = QPushButton(shp_name)
+            btn.setStyleSheet(
+                "QPushButton { font-size: 10px; padding: 2px 6px; border: 1px solid #dcdde1; "
+                "border-radius: 3px; background: #fff; color: #333; } QPushButton:hover { background: #9b59b6; color: #fff; }"
+            )
+            btn.clicked.connect(lambda checked, x=sx, y=sy, b=sb, o=so:
+                                self._apply_shadow_preset(x, y, b, o))
+            SHP_GRID.addWidget(btn)
+        sh_lo.addLayout(SHP_GRID)
         panel_layout.addWidget(shadow_group)
 
         # ---------------------------------------------------------------
@@ -658,23 +771,52 @@ class GifEditorPage(QWidget):
         bg_c_row.addWidget(self._bg_opacity_sl, 1)
         bg_lo.addLayout(bg_c_row)
         bg_p_row = QHBoxLayout(); bg_p_row.setSpacing(4)
-        bg_p_row.addWidget(_styled_label("圆角")); self._bg_radius_spin = _spin(0, 40, 12, 70)
+        bg_p_row.addWidget(_styled_label("圆角")); self._bg_radius_spin = _spin(0, 40, 8, 70)
         self._bg_radius_spin.valueChanged.connect(self._on_style_changed); bg_p_row.addWidget(self._bg_radius_spin)
         bg_p_row.addSpacing(2)
-        bg_p_row.addWidget(_styled_label("内距")); self._bg_padding_spin = _spin(0, 40, 12, 70)
+        bg_p_row.addWidget(_styled_label("内距")); self._bg_padding_spin = _spin(0, 40, 10, 70)
         self._bg_padding_spin.valueChanged.connect(self._on_style_changed); bg_p_row.addWidget(self._bg_padding_spin)
         bg_p_row.addStretch()
         bg_lo.addLayout(bg_p_row)
+
+        # Background presets
+        bgpresets_label = QLabel("背景预设:")
+        bgpresets_label.setStyleSheet("color: #7f8c8d; font-size: 10px;")
+        bg_lo.addWidget(bgpresets_label)
+        BGP_GRID = QHBoxLayout(); BGP_GRID.setSpacing(3)
+        BG_PRESETS: list[tuple[str, str, float]] = [
+            ("无背景", "", 0),
+            ("半透明黑底", "#000000", 0.6),
+            ("半透明白底", "#FFFFFF", 0.75),
+            ("深色半透明", "#333333", 0.7),
+        ]
+        for bgp_name, bgc, bgo in BG_PRESETS:
+            btn = QPushButton(bgp_name)
+            btn.setStyleSheet(
+                "QPushButton { font-size: 10px; padding: 2px 6px; border: 1px solid #dcdde1; "
+                "border-radius: 3px; background: #fff; color: #333; } QPushButton:hover { background: #2ecc71; color: #fff; }"
+            )
+            btn.clicked.connect(lambda checked, c=bgc, o=bgo: self._apply_bg_preset(c, o))
+            BGP_GRID.addWidget(btn)
+        bg_lo.addLayout(BGP_GRID)
         panel_layout.addWidget(bg_group)
 
         # ---------------------------------------------------------------
-        # BORDER
+        # BORDER (added style selector and presets)
         # ---------------------------------------------------------------
         border_group = _styled_group("边框")
         bd_lo = QVBoxLayout(border_group); bd_lo.setSpacing(4)
         self._border_cb = QCheckBox("启用背景边框")
         self._border_cb.toggled.connect(self._on_style_changed)
         bd_lo.addWidget(self._border_cb)
+        # Style selector
+        bd_style_row = QHBoxLayout(); bd_style_row.setSpacing(6)
+        bd_style_row.addWidget(_styled_label("样式"))
+        self._border_style_combo = QComboBox()
+        self._border_style_combo.addItems(["实线", "虚线"])
+        self._border_style_combo.currentIndexChanged.connect(self._on_border_style_changed)
+        bd_style_row.addWidget(self._border_style_combo, 1)
+        bd_lo.addLayout(bd_style_row)
         bd_c_row = QHBoxLayout(); bd_c_row.setSpacing(6)
         bd_c_row.addWidget(_styled_label("颜色"))
         self._border_color_btn = _color_btn(self._text_layer.border_color, 48)
@@ -689,6 +831,27 @@ class GifEditorPage(QWidget):
         self._border_opacity_sl.valueChanged.connect(self._on_style_changed)
         bd_c_row.addWidget(self._border_opacity_sl, 1)
         bd_lo.addLayout(bd_c_row)
+
+        # Border presets
+        bdpresets_label = QLabel("边框预设:")
+        bdpresets_label.setStyleSheet("color: #7f8c8d; font-size: 10px;")
+        bd_lo.addWidget(bdpresets_label)
+        BDP_GRID = QHBoxLayout(); BDP_GRID.setSpacing(3)
+        BORDER_PRESETS: list[tuple[str, str, int]] = [
+            ("白边框", "#FFFFFF", 2),
+            ("黑边框", "#000000", 2),
+            ("金色边框", "#FFD700", 2),
+            ("无边框", "", 0),
+        ]
+        for bdp_name, bdc, bdw in BORDER_PRESETS:
+            btn = QPushButton(bdp_name)
+            btn.setStyleSheet(
+                "QPushButton { font-size: 10px; padding: 2px 6px; border: 1px solid #dcdde1; "
+                "border-radius: 3px; background: #fff; color: #333; } QPushButton:hover { background: #f39c12; color: #fff; }"
+            )
+            btn.clicked.connect(lambda checked, c=bdc, w=bdw: self._apply_border_preset(c, w))
+            BDP_GRID.addWidget(btn)
+        bd_lo.addLayout(BDP_GRID)
         panel_layout.addWidget(border_group)
 
         # ---------------------------------------------------------------
@@ -782,7 +945,7 @@ class GifEditorPage(QWidget):
         scale_row = QHBoxLayout()
         scale_row.addWidget(QLabel("缩放:"))
         self._gif_scale_spin = QDoubleSpinBox(); self._gif_scale_spin.setRange(0.1, 3.0)
-        self._gif_scale_spin.setSingleStep(0.05); self._gif_scale_spin.setValue(1.0)
+        self._gif_scale_spin.setSingleStep(0.05); self._gif_scale_spin.setValue(1.685)
         self._gif_scale_spin.wheelEvent = lambda e: e.ignore()
         self._gif_scale_spin.valueChanged.connect(self._on_gif_scale_changed)
         scale_row.addWidget(self._gif_scale_spin); scale_row.addStretch()
@@ -847,19 +1010,25 @@ class GifEditorPage(QWidget):
         tl.font_family = font_family
         tl.font_path = _SYSTEM_FONTS.get(font_family)
 
+        # font_size and weight always come from the current "{地区}" text.
+        # Templates only change colors, stroke, shadow, etc.
         for key, default in [
-            ("font_size", 72), ("bold", True), ("italic", False),
+            ("bold", True), ("italic", False),
             ("fill_color", "#FFD700"), ("opacity", 1.0),
             ("letter_spacing", 0), ("line_spacing", 8), ("align", "center"),
-            ("stroke_enabled", True), ("stroke_color", "#000000"), ("stroke_width", 8),
-            ("stroke_opacity", 1.0),
-            ("shadow_enabled", True), ("shadow_color", "#000000"), ("shadow_opacity", 0.5),
-            ("shadow_offset_x", 3), ("shadow_offset_y", 3), ("shadow_blur", 4),
+            ("vertical", False),
+            ("stroke_enabled", True), ("stroke_color", "#000000"), ("stroke_width", 6),
+            ("stroke_opacity", 1.0), ("stroke_mode", "outer"),
+            ("glow_enabled", False), ("glow_color", "#FFFF88"), ("glow_width", 2),
+            ("glow_opacity", 0.8),
+            ("shadow_enabled", False), ("shadow_color", "#000000"), ("shadow_opacity", 0.3),
+            ("shadow_offset_x", 3), ("shadow_offset_y", 3), ("shadow_blur", 2),
             ("gradient_enabled", False), ("gradient_start", "#FFFFFF"), ("gradient_end", "#FFD700"),
+            ("gradient_direction", "topToBottom"),
             ("background_enabled", False), ("background_color", "#000000"),
-            ("background_opacity", 0.6), ("background_radius", 12), ("background_padding", 12),
+            ("background_opacity", 0.6), ("background_radius", 8), ("background_padding", 10),
             ("border_enabled", False), ("border_color", "#FFFFFF"),
-            ("border_width", 2), ("border_opacity", 1.0),
+            ("border_width", 2), ("border_opacity", 1.0), ("border_style", "solid"),
         ]:
             if key in style:
                 setattr(tl, key, style[key])
@@ -871,6 +1040,13 @@ class GifEditorPage(QWidget):
             self._render_preview()
 
     # === Preview mode ===
+    def enter_preview_mode(self):
+        """Public: activate video preview (called from import flow)."""
+        if self._preview_btn.isChecked():
+            return  # already in preview
+        self._preview_btn.setChecked(True)
+        self._enter_preview_mode()
+
     def _toggle_preview(self, checked: bool):
         if checked:
             self._enter_preview_mode()
@@ -943,6 +1119,47 @@ class GifEditorPage(QWidget):
 
     def _on_gif_lock_toggled(self, locked: bool):
         self._canvas.set_gif_locked(locked)
+
+    def _on_inspect_material(self):
+        """Quick-inspect: extract fill+stroke colors from GIF, apply defaults."""
+        pil_frame = self._canvas.get_current_frame_pil()
+        if pil_frame is None:
+            return
+
+        try:
+            from core.font_style_analyzer import quick_sample_colors
+            colors = quick_sample_colors(pil_frame)
+        except Exception as e:
+            logger.error(f"Inspect material failed: {e}")
+            return
+
+        tl = self._text_layer
+        tl.fill_color = colors['fill']
+        tl.stroke_color = colors['stroke']
+        tl.stroke_enabled = True
+        tl.stroke_mode = "outer"
+        tl.glow_enabled = False
+        tl.font_size = 60
+        tl.weight = 1350
+        tl.text_template = "{地区}"
+        tl.center_horizontal = True
+
+        # Position: flower text top Y + 8px
+        text_top_y = colors.get('text_top_y', 0)
+        if self._decoder:
+            tl.y = max(0, text_top_y + 8)
+            tl.x = 0
+
+        # Sync UI first, then force stroke_width=3 to override any preset
+        self._sync_ui_from_layer()
+        tl.stroke_width = 3
+        self._stroke_width_spin.setValue(3)
+
+        if self._text_item is None:
+            self._add_text()
+        else:
+            self._render_preview()
+        self.text_layer_changed.emit(tl)
 
     def _toggle_box_select(self, checked: bool):
         """Enter/exit box-select mode for font style analysis (works in preview too)."""
@@ -1128,7 +1345,7 @@ class GifEditorPage(QWidget):
             styles.append({
                 "id": t.template_id,
                 "name": t.template_name,
-                "style_params": {**t.style, "_preview_text": "Aa"},
+                "style_params": {**t.style, "_preview_text": "地区"},
             })
         if styles:
             dlg = StylePreviewDialog(styles, "", self)
@@ -1183,7 +1400,7 @@ class GifEditorPage(QWidget):
     def _reset_gif_position(self):
         self._gif_x_spin.setValue(0)
         self._gif_y_spin.setValue(0)
-        self._gif_scale_spin.setValue(1.0)
+        self._gif_scale_spin.setValue(1.685)
 
     # === Internal ===
     def _update_gif_info_label(self):
@@ -1204,6 +1421,7 @@ class GifEditorPage(QWidget):
         self._line_spin.setValue(tl.line_spacing)
         for ak, btn in self._align_btns.items():
             btn.setChecked(ak == tl.align)
+        self._vertical_cb.setChecked(getattr(tl, "vertical", False))
         # Gradient
         self._grad_cb.setChecked(tl.gradient_enabled)
         self._grad_midpoint_sl.setValue(int(tl.gradient_midpoint * 100))
@@ -1214,21 +1432,39 @@ class GifEditorPage(QWidget):
         for i in range(self._grad_dir_row.count()):
             w = self._grad_dir_row.itemAt(i).widget()
             if w: w.setVisible(tl.gradient_type != "radial")
-        self._stroke_cb.setChecked(tl.stroke_enabled)
+        # Stroke mode
+        sm_map = {"outer": 1, "glow": 2, "double": 3}
+        sm_idx = sm_map.get(getattr(tl, "stroke_mode", "outer"), 1)
+        if not tl.stroke_enabled:
+            sm_idx = 0
+        self._stroke_mode_combo.setCurrentIndex(sm_idx)
         self._stroke_width_spin.setValue(tl.stroke_width)
         self._stroke_opacity_sl.setValue(int(tl.stroke_opacity * 100))
+        # Glow
+        glow_vis = getattr(tl, "glow_enabled", False) or getattr(tl, "stroke_mode", "") == "glow"
+        self._glow_params_widget.setVisible(glow_vis or getattr(tl, "stroke_mode", "") == "double")
+        self._glow_width_spin.setValue(getattr(tl, "glow_width", 2))
+        self._glow_opacity_sl.setValue(int(getattr(tl, "glow_opacity", 0.8) * 100))
+        # Shadow
         self._shadow_cb.setChecked(tl.shadow_enabled)
         self._shadow_opacity_sl.setValue(int(tl.shadow_opacity * 100))
         self._shadow_x_spin.setValue(tl.shadow_offset_x)
         self._shadow_y_spin.setValue(tl.shadow_offset_y)
         self._shadow_blur_spin.setValue(tl.shadow_blur)
+        # Background
         self._bg_enabled_cb.setChecked(tl.background_enabled)
         self._bg_opacity_sl.setValue(int(tl.background_opacity * 100))
         self._bg_radius_spin.setValue(tl.background_radius)
         self._bg_padding_spin.setValue(tl.background_padding)
+        # Border
         self._border_cb.setChecked(tl.border_enabled)
         self._border_width_spin.setValue(tl.border_width)
         self._border_opacity_sl.setValue(int(tl.border_opacity * 100))
+        bs_idx = 1 if getattr(tl, "border_style", "solid") == "dashed" else 0
+        self._border_style_combo.setCurrentIndex(bs_idx)
+        # Bold/Italic
+        self._bold_btn.setChecked(tl.bold)
+        self._italic_btn.setChecked(tl.italic)
         # Anchor
         anc_map = {"topLeft": 0, "topCenter": 1, "topRight": 2,
                    "centerLeft": 3, "center": 4, "centerRight": 5,
@@ -1273,9 +1509,11 @@ class GifEditorPage(QWidget):
         self._text_layer.line_spacing = self._line_spin.value()
         self._text_layer.gradient_enabled = self._grad_cb.isChecked()
         self._text_layer.gradient_midpoint = self._grad_midpoint_sl.value() / 100.0
-        self._text_layer.stroke_enabled = self._stroke_cb.isChecked()
+        self._text_layer.stroke_enabled = self._stroke_mode_combo.currentIndex() != 0
         self._text_layer.stroke_width = self._stroke_width_spin.value()
         self._text_layer.stroke_opacity = self._stroke_opacity_sl.value() / 100.0
+        self._text_layer.glow_width = self._glow_width_spin.value()
+        self._text_layer.glow_opacity = self._glow_opacity_sl.value() / 100.0
         self._text_layer.shadow_enabled = self._shadow_cb.isChecked()
         self._text_layer.shadow_opacity = self._shadow_opacity_sl.value() / 100.0
         self._text_layer.shadow_offset_x = self._shadow_x_spin.value()
@@ -1293,6 +1531,89 @@ class GifEditorPage(QWidget):
     def _on_weight_changed(self, val: int):
         self._text_layer.weight = val
         self._text_layer.bold = val >= 600
+        self._render_preview()
+
+    def _on_bold_toggled(self, checked: bool):
+        self._text_layer.bold = checked
+        if checked and self._weight_spin.value() < 600:
+            self._weight_spin.setValue(700)
+        elif not checked:
+            self._weight_spin.setValue(400)
+        self._render_preview()
+
+    def _on_italic_toggled(self, checked: bool):
+        self._text_layer.italic = checked
+        self._render_preview()
+
+    def _on_stroke_mode_changed(self, idx: int):
+        mode_map = {0: ("outer", False, False), 1: ("outer", True, False),
+                    2: ("glow", True, False), 3: ("double", True, True)}
+        mode, enabled, glow_vis = mode_map.get(idx, ("outer", True, False))
+        self._text_layer.stroke_mode = mode
+        self._text_layer.stroke_enabled = enabled
+        self._text_layer.glow_enabled = glow_vis
+        self._glow_params_widget.setVisible(glow_vis or mode == "glow")
+        self._render_preview()
+
+    def _apply_stroke_preset(self, sc: str, sw: int, gc: str, gw: int):
+        self._text_layer.stroke_enabled = True
+        self._text_layer.stroke_color = sc
+        self._text_layer.stroke_width = sw
+        if gc and gw > 0:
+            self._text_layer.stroke_mode = "double"
+            self._text_layer.glow_enabled = True
+            self._text_layer.glow_color = gc
+            self._text_layer.glow_width = gw
+            self._stroke_mode_combo.setCurrentIndex(3)
+            self._glow_params_widget.setVisible(True)
+        elif sw > 0:
+            self._text_layer.stroke_mode = "outer"
+            self._text_layer.glow_enabled = False
+            self._stroke_mode_combo.setCurrentIndex(1)
+            self._glow_params_widget.setVisible(False)
+        self._sync_ui_from_layer()
+        self._render_preview()
+
+    def _apply_shadow_preset(self, sx: int, sy: int, sb: int, so: int):
+        if sb == 0 and so == 0:
+            self._text_layer.shadow_enabled = False
+            self._shadow_cb.setChecked(False)
+        else:
+            self._text_layer.shadow_enabled = True
+            self._text_layer.shadow_offset_x = sx
+            self._text_layer.shadow_offset_y = sy
+            self._text_layer.shadow_blur = sb
+            self._text_layer.shadow_opacity = so / 100.0
+            self._shadow_cb.setChecked(True)
+        self._sync_ui_from_layer()
+        self._render_preview()
+
+    def _apply_bg_preset(self, color: str, opacity: float):
+        if not color:
+            self._text_layer.background_enabled = False
+            self._bg_enabled_cb.setChecked(False)
+        else:
+            self._text_layer.background_enabled = True
+            self._text_layer.background_color = color
+            self._text_layer.background_opacity = opacity
+            self._bg_enabled_cb.setChecked(True)
+        self._sync_ui_from_layer()
+        self._render_preview()
+
+    def _apply_border_preset(self, color: str, width: int):
+        if not color or width == 0:
+            self._text_layer.border_enabled = False
+            self._border_cb.setChecked(False)
+        else:
+            self._text_layer.border_enabled = True
+            self._text_layer.border_color = color
+            self._text_layer.border_width = width
+            self._border_cb.setChecked(True)
+        self._sync_ui_from_layer()
+        self._render_preview()
+
+    def _on_border_style_changed(self, idx: int):
+        self._text_layer.border_style = "dashed" if idx == 1 else "solid"
         self._render_preview()
 
     def _on_grad_dir_changed(self, idx: int):
@@ -1393,6 +1714,10 @@ class GifEditorPage(QWidget):
             btn.setStyleSheet(BTN_CHECKED_STYLE if ak == align else BTN_UNCHECKED_STYLE)
         self._render_preview()
 
+    def _on_vertical_toggled(self, checked: bool):
+        self._text_layer.vertical = checked
+        self._render_preview()
+
     def _on_preset(self, preset_id: str):
         style = PRESET_STYLES.get(preset_id, {})
         if style:
@@ -1428,6 +1753,10 @@ class GifEditorPage(QWidget):
                 "fill_color": tl.fill_color, "opacity": tl.opacity,
                 "stroke_enabled": tl.stroke_enabled,
                 "stroke_color": tl.stroke_color, "stroke_width": tl.stroke_width,
+                "stroke_mode": getattr(tl, "stroke_mode", "outer"),
+                "glow_enabled": getattr(tl, "glow_enabled", False),
+                "glow_color": getattr(tl, "glow_color", "#FFFF88"),
+                "glow_width": getattr(tl, "glow_width", 2),
                 "shadow_enabled": tl.shadow_enabled,
                 "shadow_color": tl.shadow_color, "shadow_opacity": tl.shadow_opacity,
                 "shadow_offset_x": tl.shadow_offset_x,
@@ -1439,6 +1768,7 @@ class GifEditorPage(QWidget):
                 "border_enabled": tl.border_enabled,
                 "border_color": tl.border_color, "border_width": tl.border_width,
                 "border_opacity": tl.border_opacity,
+                "border_style": getattr(tl, "border_style", "solid"),
             }
             self._template_mgr.save_custom_template(tid, name.strip(), "自定义", style_dict)
             self._refresh_template_combo()
@@ -1460,6 +1790,7 @@ class GifEditorPage(QWidget):
     _COLOR_TARGETS = {
         "fill": ("fill_color", "_fill_color_btn"),
         "stroke": ("stroke_color", "_stroke_color_btn"),
+        "glow": ("glow_color", "_glow_color_btn"),
         "shadow": ("shadow_color", "_shadow_color_btn"),
         "background": ("background_color", "_bg_color_btn"),
         "border": ("border_color", "_border_color_btn"),

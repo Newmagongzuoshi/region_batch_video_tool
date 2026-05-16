@@ -298,12 +298,25 @@ class ImportPage(QWidget):
         self.result_text.setText("\n".join(text_parts))
 
         if result["ok"]:
+            gif_path = self.gif_path_edit.text().strip()
             result["paths"] = {
                 "video": self.video_path_edit.text().strip(),
-                "gif": self.gif_path_edit.text().strip(),
+                "gif": gif_path,
                 "txt": self.txt_path_edit.text().strip(),
                 "output": self.out_dir_edit.text().strip() or "output",
             }
+            # Extract text colors from GIF for auto-styling
+            try:
+                from PIL import Image
+                from core.font_style_analyzer import quick_sample_colors
+                gif_img = Image.open(gif_path)
+                gif_img.seek(0)
+                frame = gif_img.copy().convert('RGBA')
+                colors = quick_sample_colors(frame)
+                result["colors"] = colors
+                gif_img.close()
+            except Exception:
+                result["colors"] = None
             self.import_done.emit(result)
 
     def get_check_result(self) -> dict | None:

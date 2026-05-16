@@ -165,7 +165,44 @@ class MainWindow(QMainWindow):
         if self._video_path:
             gif_page.set_video_path(self._video_path)
 
+        # Apply extracted colors and defaults from check-material step
+        colors = result.get("colors")
+        if colors:
+            tl = gif_page._text_layer
+            tl.fill_color = colors.get("fill", tl.fill_color)
+            tl.stroke_color = colors.get("stroke", tl.stroke_color)
+            tl.stroke_enabled = True
+            tl.stroke_mode = "outer"
+            tl.glow_enabled = False
+            tl.font_size = 60
+            tl.weight = 1350
+            tl.text_template = "{地区}"
+            tl.center_horizontal = True
+            tl.x = 0
+            tl.y = 0
+            gif_page._sync_ui_from_layer()
+            tl.stroke_width = 3
+            gif_page._stroke_width_spin.setValue(3)
+
+            # Add text first (vertically centered), then reposition above flower text
+            gif_page._add_text()
+            text_top_y = colors.get("text_top_y", 0)
+            if gif_page._text_item and text_top_y > 0:
+                pixmap = gif_page._text_item._pixmap
+                if pixmap and not pixmap.isNull():
+                    # Position "{地区}" so its bottom is 8px above flower text top
+                    new_y = max(0, text_top_y - pixmap.height() - 8)
+                    tl.y = new_y
+                    gif_page._text_item.setPos(gif_page._text_item.x(), new_y)
+                    gif_page._y_spin.blockSignals(True)
+                    gif_page._y_spin.setValue(int(new_y))
+                    gif_page._y_spin.blockSignals(False)
+
+            gif_page.text_layer_changed.emit(tl)
+
         self._switch_to("GIF 编辑")
+        # Auto-enter video preview mode after import
+        gif_page.enter_preview_mode()
 
     def _on_text_layer_changed(self, text_layer: TextLayerModel):
         self._text_layer = text_layer

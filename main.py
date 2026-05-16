@@ -45,8 +45,12 @@ def main():
     font.setHintingPreference(QFont.HintingPreference.PreferFullHinting)
     app.setFont(font)
 
-    # Global checkbox style
+    # Global styles — prevent white-on-white on light-theme systems
     app.setStyleSheet("""
+        QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QTextEdit, QPlainTextEdit {
+            background: #fff;
+            color: #333;
+        }
         QCheckBox {
             font-size: 13px;
             spacing: 10px;

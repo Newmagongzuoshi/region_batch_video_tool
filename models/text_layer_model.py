@@ -16,29 +16,37 @@ class TextLayerModel:
     # Font
     font_family: str = "Microsoft YaHei"
     font_path: str | None = None
-    font_size: int = 72
+    font_size: int = 60
     bold: bool = True
     italic: bool = False
-    weight: int = 700  # 100-900
+    weight: int = 1350
     letter_spacing: int = 0
     line_spacing: int = 8
     align: str = "center"  # left / center / right
+    vertical: bool = False
     fill_color: str = "#FFD700"
     opacity: float = 1.0
 
     # Stroke
     stroke_enabled: bool = True
     stroke_color: str = "#000000"
-    stroke_width: int = 8
+    stroke_width: int = 3
     stroke_opacity: float = 1.0
+    stroke_mode: str = "outer"  # "outer" | "glow" | "double"
+
+    # Glow / highlight edge
+    glow_enabled: bool = False
+    glow_color: str = "#FFFF88"
+    glow_width: int = 2
+    glow_opacity: float = 0.8
 
     # Shadow
-    shadow_enabled: bool = True
+    shadow_enabled: bool = False
     shadow_color: str = "#000000"
     shadow_opacity: float = 0.5
-    shadow_offset_x: int = 3
-    shadow_offset_y: int = 3
-    shadow_blur: int = 4
+    shadow_offset_x: int = 4
+    shadow_offset_y: int = 4
+    shadow_blur: int = 0
 
     # Gradient
     gradient_enabled: bool = False
@@ -53,14 +61,15 @@ class TextLayerModel:
     background_enabled: bool = False
     background_color: str = "#000000"
     background_opacity: float = 0.6
-    background_radius: int = 12
-    background_padding: int = 12
+    background_radius: int = 8
+    background_padding: int = 10
 
     # Background border
     border_enabled: bool = False
     border_color: str = "#FFFFFF"
     border_width: int = 2
     border_opacity: float = 1.0
+    border_style: str = "solid"  # "solid" | "dashed"
 
     # Guides & Snap
     guide_enabled: bool = True
@@ -80,9 +89,13 @@ class TextLayerModel:
             font_family=self.font_family, font_path=self.font_path,
             font_size=self.font_size, bold=self.bold, italic=self.italic,
             weight=self.weight, letter_spacing=self.letter_spacing, line_spacing=self.line_spacing,
-            align=self.align, fill_color=self.fill_color, opacity=self.opacity,
+            align=self.align, vertical=self.vertical,
+            fill_color=self.fill_color, opacity=self.opacity,
             stroke_enabled=self.stroke_enabled, stroke_color=self.stroke_color,
             stroke_width=self.stroke_width, stroke_opacity=self.stroke_opacity,
+            stroke_mode=self.stroke_mode,
+            glow_enabled=self.glow_enabled, glow_color=self.glow_color,
+            glow_width=self.glow_width, glow_opacity=self.glow_opacity,
             shadow_enabled=self.shadow_enabled, shadow_color=self.shadow_color,
             shadow_opacity=self.shadow_opacity, shadow_offset_x=self.shadow_offset_x,
             shadow_offset_y=self.shadow_offset_y, shadow_blur=self.shadow_blur,
@@ -95,6 +108,7 @@ class TextLayerModel:
             background_padding=self.background_padding,
             border_enabled=self.border_enabled, border_color=self.border_color,
             border_width=self.border_width, border_opacity=self.border_opacity,
+            border_style=self.border_style,
             guide_enabled=self.guide_enabled, snap_enabled=self.snap_enabled,
             safe_area_enabled=self.safe_area_enabled,
             template_id=self.template_id, anchor=self.anchor, max_width=self.max_width,

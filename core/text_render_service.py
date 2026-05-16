@@ -81,8 +81,12 @@ class TextRenderService:
         weight = getattr(layer, "weight", 700)
         use_bold = getattr(layer, "bold", True) or weight >= 600
         font = _get_font(layer.font_size, layer.font_family, layer.font_path, use_bold)
-        # Extra horizontal offset for heavy weights (simulates bolder appearance)
-        weight_offset = min(5, max(0, (weight - 600) // 200))  # capped at 5 to avoid perf issues
+        # Weight → render offset: (weight - 400) // 150, capped at 12.
+        # 400→0, 1000→4, 1600→8, 2100→11, 2200→12.
+        weight_offset = min(12, max(0, (weight - 400) // 150))
+        # Vertical text: insert newline between each character
+        if getattr(layer, "vertical", False) and "\n" not in text:
+            text = "\n".join(text)
         lines = text.split("\n")
 
         # Measure each line (accounting for letter spacing)
@@ -134,13 +138,22 @@ class TextRenderService:
                 border_rgb = _hex_to_rgb(layer.border_color)
                 border_alpha = int(255 * layer.border_opacity)
                 border_pad = layer.border_width
-                # Draw border (slightly larger rounded rect)
-                draw.rounded_rectangle(
-                    (bg_x1 - border_pad, bg_y1 - border_pad,
-                     bg_x2 + border_pad, bg_y2 + border_pad),
-                    radius=layer.background_radius + border_pad,
-                    fill=(*border_rgb, border_alpha),
-                )
+                border_style = getattr(layer, "border_style", "solid")
+
+                if border_style == "dashed":
+                    self._draw_dashed_rounded_rect(
+                        draw, bg_x1 - border_pad, bg_y1 - border_pad,
+                        bg_x2 + border_pad, bg_y2 + border_pad,
+                        radius=layer.background_radius + border_pad,
+                        color=(*border_rgb, border_alpha), width=border_pad,
+                    )
+                else:
+                    draw.rounded_rectangle(
+                        (bg_x1 - border_pad, bg_y1 - border_pad,
+                         bg_x2 + border_pad, bg_y2 + border_pad),
+                        radius=layer.background_radius + border_pad,
+                        fill=(*border_rgb, border_alpha),
+                    )
 
             draw.rounded_rectangle(
                 (bg_x1, bg_y1, bg_x2, bg_y2),
@@ -172,8 +185,13 @@ class TextRenderService:
                                       color=(*shadow_rgb, shadow_alpha),
                                       weight_offset=0)
 
-        # ---- stroke ----
-        if layer.stroke_enabled:
+        # ---- outer dark stroke ----
+        stroke_mode = getattr(layer, "stroke_mode", "outer")
+        needs_dark_stroke = layer.stroke_enabled and stroke_mode in ("outer", "double")
+        needs_glow = (layer.stroke_enabled and stroke_mode in ("glow", "double")) or (
+            getattr(layer, "glow_enabled", False))
+
+        if needs_dark_stroke:
             stroke_rgb = _hex_to_rgb(layer.stroke_color)
             stroke_alpha = int(255 * getattr(layer, "stroke_opacity", 1.0))
             sw = layer.stroke_width
@@ -185,6 +203,25 @@ class TextRenderService:
                                           origin_x + dx, origin_y + dy,
                                           text_w, line_sizes,
                                           color=(*stroke_rgb, stroke_alpha),
+                                          weight_offset=weight_offset)
+
+        # ---- inner glow / highlight edge ----
+        if needs_glow:
+            glow_color = getattr(layer, "glow_color", "#FFFF88")
+            if stroke_mode == "glow":
+                # Use stroke_color as the glow when in pure glow mode
+                glow_color = layer.stroke_color
+            glow_rgb = _hex_to_rgb(glow_color)
+            glow_alpha = int(255 * getattr(layer, "glow_opacity", 0.8))
+            gw = getattr(layer, "glow_width", 2) if stroke_mode == "double" else layer.stroke_width
+            for dx in range(-gw, gw + 1):
+                for dy in range(-gw, gw + 1):
+                    if dx == 0 and dy == 0:
+                        continue
+                    self._draw_text_lines(draw, lines, font, layer,
+                                          origin_x + dx, origin_y + dy,
+                                          text_w, line_sizes,
+                                          color=(*glow_rgb, glow_alpha),
                                           weight_offset=weight_offset)
 
         # ---- fill text ----
@@ -212,6 +249,93 @@ class TextRenderService:
         if bbox:
             img = img.crop(bbox)
         return img
+
+    # ---- dashed border helper ----
+
+    @staticmethod
+    def _draw_dashed_rounded_rect(draw, x1, y1, x2, y2, radius, color, width):
+        """Draw a dashed rounded rectangle border using line segments."""
+        w = max(1, width)
+        dash_len = max(4, w * 2)
+        gap_len = max(3, w + 1)
+
+        # Build the path as a list of (x, y) points along the rounded rect
+        def _arc_points(cx, cy, r, start_angle, end_angle, steps=8):
+            import math
+            pts = []
+            for i in range(steps + 1):
+                angle = start_angle + (end_angle - start_angle) * i / steps
+                pts.append((cx + r * math.cos(angle), cy + r * math.sin(angle)))
+            return pts
+
+        r = radius
+        path: list[tuple[float, float]] = []
+
+        # Top edge: left→right (minus corner arcs)
+        path.append((x1 + r, y1))
+        path.append((x2 - r, y1))
+        # Top-right corner
+        path.extend(_arc_points(x2 - r, y1 + r, r, -1.5708, 0))
+        # Right edge
+        path.append((x2, y2 - r))
+        # Bottom-right corner
+        path.extend(_arc_points(x2 - r, y2 - r, r, 0, 1.5708))
+        # Bottom edge
+        path.append((x1 + r, y2))
+        # Bottom-left corner
+        path.extend(_arc_points(x1 + r, y2 - r, r, 1.5708, 3.14159))
+        # Left edge
+        path.append((x1, y1 + r))
+        # Top-left corner
+        path.extend(_arc_points(x1 + r, y1 + r, r, 3.14159, 4.71239))
+
+        # Draw dashes along the path
+        total_dist = 0.0
+        for i in range(1, len(path)):
+            dx = path[i][0] - path[i-1][0]
+            dy = path[i][1] - path[i-1][1]
+            total_dist += (dx*dx + dy*dy) ** 0.5
+
+        drawn = 0.0
+        drawing = True
+        seg_start = path[0]
+
+        for i in range(1, len(path)):
+            p0, p1 = path[i-1], path[i]
+            seg_dx = p1[0] - p0[0]
+            seg_dy = p1[1] - p0[1]
+            seg_len = (seg_dx*seg_dx + seg_dy*seg_dy) ** 0.5
+            if seg_len < 0.01:
+                continue
+
+            local_pos = 0.0
+            while local_pos < seg_len:
+                remaining = seg_len - local_pos
+                if drawing:
+                    take = min(dash_len - drawn, remaining)
+                    end_x = p0[0] + seg_dx * (local_pos + take) / seg_len
+                    end_y = p0[1] + seg_dy * (local_pos + take) / seg_len
+                    draw.line(
+                        [(seg_start[0], seg_start[1]), (end_x, end_y)],
+                        fill=color, width=w,
+                    )
+                    drawn += take
+                    local_pos += take
+                    seg_start = (end_x, end_y)
+                    if drawn >= dash_len:
+                        drawing = False
+                        drawn = 0.0
+                else:
+                    take = min(gap_len - drawn, remaining)
+                    local_pos += take
+                    drawn += take
+                    if drawn >= gap_len:
+                        drawing = True
+                        drawn = 0.0
+                        seg_start = (
+                            p0[0] + seg_dx * local_pos / seg_len,
+                            p0[1] + seg_dy * local_pos / seg_len,
+                        )
 
     # ---- line drawing helpers ----
 
@@ -310,8 +434,6 @@ class TextRenderService:
                 r = int(start_rgb[0] + (end_rgb[0] - start_rgb[0]) * ratio)
                 g = int(start_rgb[1] + (end_rgb[1] - start_rgb[1]) * ratio)
                 b = int(start_rgb[2] + (end_rgb[2] - start_rgb[2]) * ratio)
-            g = int(start_rgb[1] + (end_rgb[1] - start_rgb[1]) * ratio)
-            b = int(start_rgb[2] + (end_rgb[2] - start_rgb[2]) * ratio)
             for woff in range(weight_offset + 1):
                 draw.text((cx + woff, cy), ch, font=font, fill=(r, g, b, alpha))
 

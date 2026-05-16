@@ -38,7 +38,7 @@ class FontPickerDialog(QDialog):
         self._search_edit.setPlaceholderText("搜索字体（支持中文/英文）...")
         self._search_edit.setStyleSheet(
             "QLineEdit { padding: 6px 10px; border: 1px solid #dcdde1; "
-            "border-radius: 4px; font-size: 13px; background: #fff; }"
+            "border-radius: 4px; font-size: 13px; background: #fff; color: #333; }"
         )
         self._search_edit.textChanged.connect(self._on_search)
         search_row.addWidget(self._search_edit)
@@ -52,7 +52,7 @@ class FontPickerDialog(QDialog):
         self._group_list.setFixedWidth(160)
         self._group_list.setStyleSheet(
             "QListWidget { border: 1px solid #dcdde1; border-radius: 4px; "
-            "background: #fff; font-size: 12px; }"
+            "background: #fff; color: #333; font-size: 12px; }"
             "QListWidget::item { padding: 4px 8px; }"
             "QListWidget::item:selected { background: #3498db; color: #fff; }"
         )
@@ -68,7 +68,7 @@ class FontPickerDialog(QDialog):
         self._font_list = QListWidget()
         self._font_list.setStyleSheet(
             "QListWidget { border: 1px solid #dcdde1; border-radius: 4px; "
-            "background: #fff; font-size: 14px; }"
+            "background: #fff; color: #333; font-size: 14px; }"
             "QListWidget::item { padding: 6px 10px; }"
             "QListWidget::item:selected { background: #3498db; color: #fff; }"
         )
@@ -113,15 +113,21 @@ class FontPickerDialog(QDialog):
 
             # Build display text
             display = fi.family
-            if not fi.installed:
+            if fi.built_in:
+                display += "  [内置]"
+            elif not fi.installed:
                 display += "  [未安装]"
 
             item.setText(display)
 
+            # For built-in fonts, register with QFontDatabase so QFont can use them
+            if fi.built_in and fi.path:
+                from PySide6.QtGui import QFontDatabase
+                QFontDatabase.addApplicationFont(fi.path)
+
             # Try to render in the font itself
             if fi.installed and fi.path:
                 font = QFont(fi.family)
-                # QFont needs the family name, not the file path
                 item.setFont(font)
             else:
                 item.setFont(QFont("Microsoft YaHei", 10))
