@@ -107,27 +107,33 @@ class BatchTaskManager:
             self._source_loudness = {"mean_volume_db": -20.0}
 
         # ---- Pre-split source video: head (GIF duration) + tail ----
-        # Each region only re-encodes the head segment. The tail is
-        # losslessly concatenated — no re-encoding needed.  This avoids
-        # re-encoding the full video 240 times.
         self._gif_duration_s = sum(self._gif_durations) / 1000.0
-        self._use_split = self._video_duration > self._gif_duration_s + 0.5
-
         self._head_path = ""
         self._tail_path = ""
-        self._head_info = self._video_info  # default
-        if self._use_split:
+        self._head_info = self._video_info
+        self._use_split = False  # only set True after verified success
+
+        if self._video_duration > self._gif_duration_s + 0.5:
             cache_dir = self._cache_mgr._video_temp_dir
             self._head_path = os.path.join(cache_dir, "_source_head.mp4")
             self._tail_path = os.path.join(cache_dir, "_source_tail.mp4")
             if not os.path.isfile(self._head_path):
                 logger.info(f"[SPLIT] Cutting head ({self._gif_duration_s:.1f}s) + tail from source")
-                self._split_source(source_video_path, self._head_path, self._tail_path,
-                                   self._gif_duration_s)
+                try:
+                    self._split_source(source_video_path, self._head_path, self._tail_path,
+                                       self._gif_duration_s)
+                except Exception as e:
+                    logger.warning(f"[SPLIT] Failed: {e}, will use full-source compose")
+            # Verify split succeeded
+            if os.path.isfile(self._head_path) and os.path.getsize(self._head_path) > 1000:
                 self._head_info = self._ffmpeg.probe_video(self._head_path)
+                if self._head_info.duration > 0.1:
+                    self._use_split = True
+                    logger.info(f"[SPLIT] Verified OK: head={self._head_info.duration:.1f}s")
+                else:
+                    logger.warning(f"[SPLIT] Head segment invalid, using full-source compose")
             else:
-                logger.info(f"[SPLIT] Reusing cached head+tail segments")
-                self._head_info = self._ffmpeg.probe_video(self._head_path)
+                logger.warning(f"[SPLIT] Head file missing/empty, using full-source compose")
 
         self._worker_count = _get_worker_count(
             self._composer._encoder["codec"]
@@ -249,13 +255,17 @@ class BatchTaskManager:
         fex = ff.ffmpeg_path or "ffmpeg"
         flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         # Head
-        subprocess.run([fex, "-y", "-i", src, "-t", str(split_time),
-                        "-c", "copy", "-avoid_negative_ts", "make_zero", head],
-                       capture_output=True, timeout=60, creationflags=flags)
+        r = subprocess.run([fex, "-y", "-i", src, "-t", str(split_time),
+                           "-c", "copy", "-avoid_negative_ts", "make_zero", head],
+                          capture_output=True, text=True, timeout=60, creationflags=flags)
+        if r.returncode != 0:
+            raise RuntimeError(f"Head split failed: {r.stderr[-200:]}")
         # Tail
-        subprocess.run([fex, "-y", "-ss", str(split_time), "-i", src,
-                        "-c", "copy", "-avoid_negative_ts", "make_zero", tail],
-                       capture_output=True, timeout=60, creationflags=flags)
+        r = subprocess.run([fex, "-y", "-ss", str(split_time), "-i", src,
+                           "-c", "copy", "-avoid_negative_ts", "make_zero", tail],
+                          capture_output=True, text=True, timeout=60, creationflags=flags)
+        if r.returncode != 0:
+            raise RuntimeError(f"Tail split failed: {r.stderr[-200:]}")
 
     def _compose_mp4_fast(self, gif_path: str, mp3_path: str, output_path: str,
                           safe_name: str) -> bool:
