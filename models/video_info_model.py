@@ -11,3 +11,4 @@ class VideoInfoModel:
     audio_sample_rate: int = 0
     audio_channels: int = 0
     codec: str = ""
+    bitrate: float = 0.0  # kbps

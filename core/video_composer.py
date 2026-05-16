@@ -260,19 +260,25 @@ class VideoComposer:
             enc_codec = enc["codec"]
             enc_preset = enc["preset"]
 
-            # Quality flags per encoder (prevents blurry GPU output)
-            quality_flags = []
+            # Match source video bitrate for consistent quality/size
+            src_br = video_info.bitrate if video_info else 0
+            if src_br <= 0:
+                src_br = 5000  # fallback 5Mbps
+            br = f"{max(2000, int(src_br))}k"
+            max_br = f"{max(3000, int(src_br * 1.3))}k"
+            buf = f"{max(4000, int(src_br * 2))}k"
+
             if "nvenc" in enc_codec:
-                quality_flags = ["-b:v", "6M", "-maxrate", "8M", "-bufsize", "12M",
+                quality_flags = ["-b:v", br, "-maxrate", max_br, "-bufsize", buf,
                                  "-rc", "vbr", "-spatial_aq", "1", "-temporal_aq", "1"]
             elif "amf" in enc_codec:
-                quality_flags = ["-b:v", "6M", "-maxrate", "8M", "-bufsize", "12M",
+                quality_flags = ["-b:v", br, "-maxrate", max_br, "-bufsize", buf,
                                  "-quality", "quality"]
             elif "qsv" in enc_codec:
-                quality_flags = ["-b:v", "6M", "-maxrate", "8M", "-bufsize", "12M",
+                quality_flags = ["-b:v", br, "-maxrate", max_br, "-bufsize", buf,
                                  "-look_ahead", "1"]
             elif "mf" in enc_codec:
-                quality_flags = ["-b:v", "6M"]
+                quality_flags = ["-b:v", br]
 
             cmd.extend([
                 "-t", duration_str,

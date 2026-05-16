@@ -248,10 +248,13 @@ class FFmpegService:
 
             fmt = data.get("format", {})
             info.duration = float(fmt.get("duration", 0))
+            # Extract video bitrate (bps → kbps)
+            raw_br = fmt.get("bit_rate", 0) or stream.get("bit_rate", 0)
+            info.bitrate = float(raw_br) / 1000.0 if raw_br else 0.0
 
             logger.info(
                 f"Video: {info.width}x{info.height}, {info.fps:.2f}fps, "
-                f"{info.duration:.2f}s, audio={info.has_audio}"
+                f"{info.duration:.2f}s, {info.bitrate:.0f}kbps, audio={info.has_audio}"
             )
             return info
 

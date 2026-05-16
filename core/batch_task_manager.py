@@ -379,15 +379,21 @@ class BatchTaskManager:
         fex = ff.ffmpeg_path or "ffmpeg"
         enc = self._composer._encoder
         codec = enc["codec"]
-        # Quality flags (same as video_composer)
-        qf = []
-        if "nvenc" in codec:    qf = ["-b:v", "6M", "-maxrate", "8M", "-bufsize", "12M",
+        # Match source video bitrate
+        src_br = self._video_info.bitrate if self._video_info else 0
+        if src_br <= 0:
+            src_br = 5000
+        br = f"{max(2000, int(src_br))}k"
+        max_br = f"{max(3000, int(src_br * 1.3))}k"
+        buf = f"{max(4000, int(src_br * 2))}k"
+
+        if "nvenc" in codec:    qf = ["-b:v", br, "-maxrate", max_br, "-bufsize", buf,
                                       "-rc", "vbr", "-spatial_aq", "1", "-temporal_aq", "1"]
-        elif "amf" in codec:    qf = ["-b:v", "6M", "-maxrate", "8M", "-bufsize", "12M",
+        elif "amf" in codec:    qf = ["-b:v", br, "-maxrate", max_br, "-bufsize", buf,
                                       "-quality", "quality"]
-        elif "qsv" in codec:    qf = ["-b:v", "6M", "-maxrate", "8M", "-bufsize", "12M",
+        elif "qsv" in codec:    qf = ["-b:v", br, "-maxrate", max_br, "-bufsize", buf,
                                       "-look_ahead", "1"]
-        elif "mf" in codec:     qf = ["-b:v", "6M"]
+        elif "mf" in codec:     qf = ["-b:v", br]
 
         flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         r = subprocess.run(
