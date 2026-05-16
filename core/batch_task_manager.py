@@ -125,32 +125,13 @@ class BatchTaskManager:
         except Exception:
             self._source_loudness = {"mean_volume_db": -20.0}
 
-        # ---- Pre-split source video: head (GIF duration) + tail ----
+        # Split disabled: -c copy can't do frame-accurate cuts, tail shows glitches.
+        # GPU full-source encode is fast enough (~0.5s/video).
         self._gif_duration_s = sum(self._gif_durations) / 1000.0
+        self._use_split = False
         self._head_path = ""
         self._tail_path = ""
         self._head_info = self._video_info
-        self._use_split = False
-
-        if self._video_duration > self._gif_duration_s + 0.5:
-            cache_dir = self._cache_mgr._video_temp_dir
-            # Include source filename in cache key — different videos get different splits
-            import hashlib
-            src_hash = hashlib.md5(source_video_path.encode()).hexdigest()[:8]
-            self._head_path = os.path.join(cache_dir, f"_head_{src_hash}.mp4")
-            self._tail_path = os.path.join(cache_dir, f"_tail_{src_hash}.mp4")
-            if not os.path.isfile(self._head_path):
-                logger.info(f"[SPLIT] Cutting head ({self._gif_duration_s:.1f}s) + tail from source")
-                try:
-                    self._split_source(source_video_path, self._head_path, self._tail_path,
-                                       self._gif_duration_s)
-                except Exception as e:
-                    logger.warning(f"[SPLIT] Failed: {e}")
-            if os.path.isfile(self._head_path) and os.path.getsize(self._head_path) > 1000:
-                self._head_info = self._ffmpeg.probe_video(self._head_path)
-                if self._head_info.duration > 0.1:
-                    self._use_split = True
-                    logger.info(f"[SPLIT] OK: head={self._head_info.duration:.1f}s")
 
         self._worker_count = _get_worker_count(
             self._composer._encoder["codec"]
