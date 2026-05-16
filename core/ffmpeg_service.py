@@ -99,28 +99,41 @@ class FFmpegService:
                     "description": "CPU x264 (fallback)"}
 
         def _test_encoder(codec: str, preset: str) -> bool:
-            try:
-                r = subprocess.run(
-                    [self._ffmpeg_path, "-y", "-f", "lavfi", "-i",
-                     "color=c=black:s=32x32:d=0.1", "-t", "0.1",
-                     "-c:v", codec, "-preset", preset, "-pix_fmt", "yuv420p",
-                     "-f", "null", "-"],
-                    capture_output=True, text=True, timeout=10,
-                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
-                )
-                return r.returncode == 0
-            except Exception:
-                return False
+            """Test encoder with a short synthetic clip. Tries alternative
+            presets for NVENC which can be driver-sensitive."""
+            presets_to_try = [preset]
+            if "nvenc" in codec:
+                presets_to_try = ["p4", "p1", "default", "medium"]
+            for p in presets_to_try:
+                try:
+                    r = subprocess.run(
+                        [self._ffmpeg_path, "-y", "-f", "lavfi", "-i",
+                         "testsrc=duration=0.5:size=64x64:rate=10", "-t", "0.3",
+                         "-c:v", codec, "-preset", p, "-pix_fmt", "yuv420p",
+                         "-f", "null", "-"],
+                        capture_output=True, text=True, timeout=10,
+                        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+                    )
+                    if r.returncode == 0:
+                        return True
+                except Exception:
+                    continue
+            return False
 
         # Test GPU encoders in priority order
         for codec, preset, desc in [
-            ("h264_nvenc", "p1", "NVIDIA NVENC GPU"),
+            ("h264_nvenc", "p4", "NVIDIA NVENC GPU"),
             ("h264_amf", "speed", "AMD AMF GPU"),
             ("h264_qsv", "veryfast", "Intel QSV GPU"),
         ]:
             if _test_encoder(codec, preset):
                 return {"codec": codec, "preset": preset, "description": desc}
-            logger.info(f"Encoder {codec} listed but failed runtime test, skipping")
+            logger.info(f"Encoder {codec} not available, trying next...")
+
+        # Try Media Foundation (Windows hardware encoder via OS)
+        if sys.platform == "win32" and _test_encoder("h264_mf", "fast"):
+            return {"codec": "h264_mf", "preset": "fast",
+                    "description": "Media Foundation GPU"}
 
         return {"codec": "libx264", "preset": "ultrafast",
                 "description": "CPU x264"}
