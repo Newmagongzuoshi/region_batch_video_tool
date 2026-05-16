@@ -91,50 +91,103 @@ class FFmpegService:
     def detect_hardware_encoder(self) -> dict:
         """Auto-detect the best available hardware video encoder.
 
-        Actually tests each encoder with a 1-frame encode — some GPUs
-        list NVENC but fail at runtime (driver issues).
+        Tests each encoder at runtime — some GPUs list encoders but fail
+        due to driver issues.  Returns {codec, preset, description}.
         """
         if not self._ffmpeg_path:
             return {"codec": "libx264", "preset": "ultrafast",
-                    "description": "CPU x264 (fallback)"}
+                    "description": "CPU x264 (no ffmpeg)"}
 
-        def _test_encoder(codec: str, preset: str) -> bool:
-            """Test encoder with a short synthetic clip. Tries alternative
-            presets for NVENC which can be driver-sensitive."""
-            presets_to_try = [preset]
-            if "nvenc" in codec:
-                presets_to_try = ["p4", "p1", "default", "medium"]
-            for p in presets_to_try:
-                try:
-                    r = subprocess.run(
-                        [self._ffmpeg_path, "-y", "-f", "lavfi", "-i",
-                         "testsrc=duration=0.5:size=64x64:rate=10", "-t", "0.3",
-                         "-c:v", codec, "-preset", p, "-pix_fmt", "yuv420p",
-                         "-f", "null", "-"],
-                        capture_output=True, text=True, timeout=10,
-                        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
-                    )
-                    if r.returncode == 0:
-                        return True
-                except Exception:
-                    continue
-            return False
+        # Pre-check: which encoders are compiled into this ffmpeg build
+        compiled_encoders = set()
+        try:
+            r = subprocess.run(
+                [self._ffmpeg_path, "-encoders"],
+                capture_output=True, text=True, timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            )
+            for line in (r.stdout + r.stderr).split("\n"):
+                if line.startswith(" V") and "h264" in line:
+                    compiled_encoders.add(line.split()[1])
+        except Exception:
+            pass  # fall through to runtime testing
 
-        # Test GPU encoders in priority order
-        for codec, preset, desc in [
-            ("h264_nvenc", "p4", "NVIDIA NVENC GPU"),
-            ("h264_amf", "speed", "AMD AMF GPU"),
-            ("h264_qsv", "veryfast", "Intel QSV GPU"),
-        ]:
-            if _test_encoder(codec, preset):
-                return {"codec": codec, "preset": preset, "description": desc}
-            logger.info(f"Encoder {codec} not available, trying next...")
+        def _test(codec: str, preset: str, extra_args: list | None = None) -> tuple[bool, str]:
+            """Test one encoder/preset combo. Returns (ok, working_preset)."""
+            args = extra_args or []
+            try:
+                r = subprocess.run(
+                    [self._ffmpeg_path, "-y", "-f", "lavfi", "-i",
+                     "testsrc=duration=0.8:size=128x128:rate=10",
+                     "-t", "0.5", "-c:v", codec, "-preset", preset,
+                     "-pix_fmt", "yuv420p", "-f", "null", "-"] + args,
+                    capture_output=True, text=True, timeout=10,
+                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+                )
+                return (r.returncode == 0, preset)
+            except Exception:
+                return (False, preset)
 
-        # Try Media Foundation (Windows hardware encoder via OS)
-        if sys.platform == "win32" and _test_encoder("h264_mf", "fast"):
-            return {"codec": "h264_mf", "preset": "fast",
-                    "description": "Media Foundation GPU"}
+        def _find_working_preset(codec: str, presets: list[str],
+                                  extra_args: list | None = None) -> str | None:
+            """Try presets in order, return the first working one."""
+            for p in presets:
+                ok, wp = _test(codec, p, extra_args)
+                if ok:
+                    return wp
+            return None
 
+        # ---- Platform-specific encoder priority ----
+        candidates = []
+
+        # NVIDIA NVENC — multiple presets, multi-GPU
+        if "h264_nvenc" in compiled_encoders or not compiled_encoders:
+            nv_presets = ["p4", "p1", "default", "medium", "slow"]
+            for gpu in [None, 0, 1]:  # default GPU, then GPU 0, GPU 1
+                extra = ["-gpu", str(gpu)] if gpu is not None else []
+                wp = _find_working_preset("h264_nvenc", nv_presets, extra)
+                if wp:
+                    desc = f"NVIDIA NVENC GPU" + (f" (device {gpu})" if gpu else "")
+                    candidates.append(("h264_nvenc", wp, desc, 1))
+                    break
+
+        # AMD AMF
+        if "h264_amf" in compiled_encoders or not compiled_encoders:
+            wp = _find_working_preset("h264_amf", ["speed", "quality", "balanced"])
+            if wp:
+                candidates.append(("h264_amf", wp, "AMD AMF GPU", 2))
+
+        # Intel QSV
+        if "h264_qsv" in compiled_encoders or not compiled_encoders:
+            wp = _find_working_preset("h264_qsv", ["veryfast", "faster", "fast", "medium"])
+            if wp:
+                candidates.append(("h264_qsv", wp, "Intel QSV GPU", 3))
+
+        # Apple VideoToolbox
+        if sys.platform == "darwin":
+            wp = _find_working_preset("h264_videotoolbox", ["fast"])
+            if wp:
+                candidates.append(("h264_videotoolbox", wp, "Apple VideoToolbox", 4))
+
+        # Linux VAAPI
+        if sys.platform == "linux":
+            wp = _find_working_preset("h264_vaapi", ["fast"])
+            if wp:
+                candidates.append(("h264_vaapi", wp, "Linux VAAPI GPU", 4))
+
+        # Windows Media Foundation
+        if sys.platform == "win32":
+            wp = _find_working_preset("h264_mf", ["fast", "medium"])
+            if wp:
+                candidates.append(("h264_mf", wp, "Media Foundation GPU", 5))
+
+        # Pick the fastest available
+        candidates.sort(key=lambda x: x[3])
+        for codec, preset, desc, _ in candidates:
+            logger.info(f"Selected encoder: {desc} ({codec}/{preset})")
+            return {"codec": codec, "preset": preset, "description": desc}
+
+        logger.info("No GPU encoder available, using CPU x264")
         return {"codec": "libx264", "preset": "ultrafast",
                 "description": "CPU x264"}
 
