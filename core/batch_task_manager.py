@@ -349,11 +349,12 @@ class BatchTaskManager:
 
     def _compose_mp4_fast(self, gif_path: str, mp3_path: str, output_path: str,
                           safe_name: str) -> bool:
-        """Compose video — with split+concat when available."""
+        """Compose video — uses split+copy-concat when codecs match."""
         if self._use_split and self._head_path and self._tail_path:
             import subprocess, sys
             head_out = os.path.join(self._cache_mgr._video_temp_dir,
                                     f"{safe_name}_head.mp4")
+            # Step 1: compose GIF+audio onto head segment with GPU
             ok = self._composer.compose_final_video_cached(
                 self._head_path, gif_path, mp3_path, head_out,
                 video_info=self._head_info,
@@ -364,35 +365,51 @@ class BatchTaskManager:
             if not ok:
                 return False
 
-            # Concat filter: re-encodes both segments into consistent format.
-            # Handles any codec mismatch between GPU head and source tail.
-            try:
-                ff = FFmpegService()
-                fex = ff.ffmpeg_path or "ffmpeg"
-                enc = self._composer._encoder
-                flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-                r = subprocess.run(
-                    [fex, "-y",
-                     "-i", head_out, "-i", self._tail_path,
-                     "-filter_complex",
-                     "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[v][a]",
-                     "-map", "[v]", "-map", "[a]",
-                     "-c:v", enc["codec"], "-preset", enc["preset"],
-                     "-pix_fmt", "yuv420p", "-c:a", "aac",
-                     "-movflags", "+faststart", output_path],
-                    capture_output=True, text=True, timeout=120,
-                    creationflags=flags,
-                )
-                if r.returncode == 0 and os.path.isfile(output_path) and os.path.getsize(output_path) > 0:
-                    try: os.remove(head_out)
-                    except: pass
-                    return True
-                stderr_tail = (r.stderr or "")[-300:]
-                logger.warning(f"Concat filter failed, falling back to full source: {stderr_tail}")
-            except Exception as e:
-                logger.warning(f"Concat error: {e}")
+            # Step 2: re-encode head_out with CPU to match tail's H.264 codec.
+            # Only 3 seconds — ultrafast preset finishes in <1s.
+            head_fixed = head_out.replace(".mp4", "_fix.mp4")
+            ff = FFmpegService()
+            fex = ff.ffmpeg_path or "ffmpeg"
+            flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
-        # Fallback or no split: compose on full source
+            r = subprocess.run(
+                [fex, "-y", "-i", head_out,
+                 "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
+                 "-pix_fmt", "yuv420p", "-c:a", "aac",
+                 "-movflags", "+faststart", head_fixed],
+                capture_output=True, text=True, timeout=30,
+                creationflags=flags,
+            )
+            if r.returncode != 0:
+                os.remove(head_out)
+                return self._compose_final_video_full(gif_path, mp3_path, output_path)
+
+            # Step 3: lossless concat — head_fixed + tail have matching codecs
+            concat_list = os.path.join(self._cache_mgr._video_temp_dir,
+                                       f"{safe_name}_clist.txt")
+            with open(concat_list, "w", encoding="utf-8") as f:
+                f.write(f"file '{os.path.abspath(head_fixed).replace(chr(92), '/')}'\n")
+                f.write(f"file '{os.path.abspath(self._tail_path).replace(chr(92), '/')}'\n")
+
+            r2 = subprocess.run(
+                [fex, "-y", "-f", "concat", "-safe", "0", "-i", concat_list,
+                 "-c", "copy", "-movflags", "+faststart", output_path],
+                capture_output=True, text=True, timeout=30,
+                creationflags=flags,
+            )
+            # Cleanup
+            for p in [head_out, head_fixed, concat_list]:
+                try: os.remove(p)
+                except: pass
+
+            if r2.returncode == 0 and os.path.isfile(output_path) and os.path.getsize(output_path) > 0:
+                return True
+            logger.warning(f"Copy-concat failed, falling back to full source")
+
+        return self._compose_final_video_full(gif_path, mp3_path, output_path)
+
+    def _compose_final_video_full(self, gif_path: str, mp3_path: str, output_path: str) -> bool:
+        """Compose on full source (fallback)."""
         return self._composer.compose_final_video_cached(
             self._source_video_path, gif_path, mp3_path, output_path,
             video_info=self._video_info, gif_durations=self._gif_durations,
