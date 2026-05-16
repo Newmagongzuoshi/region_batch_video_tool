@@ -379,10 +379,13 @@ class BatchTaskManager:
         fex = ff.ffmpeg_path or "ffmpeg"
         enc = self._composer._encoder
         codec = enc["codec"]
-        # Match source video bitrate
+        # Match source bitrate, or compress if setting enabled
+        from ui.settings_page import load_video_compress
         src_br = self._video_info.bitrate if self._video_info else 0
         if src_br <= 0:
             src_br = 5000
+        if load_video_compress():
+            src_br = 3000
         br = f"{max(2000, int(src_br))}k"
         max_br = f"{max(3000, int(src_br * 1.3))}k"
         buf = f"{max(4000, int(src_br * 2))}k"
