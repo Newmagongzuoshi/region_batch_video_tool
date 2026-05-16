@@ -199,6 +199,11 @@ class BatchTaskManager:
 
         self._elapsed_sec = time.time() - t_start
         self._write_report()
+        # Cleanup pre-split head/tail after batch completes
+        for p in [self._head_path, self._tail_path]:
+            if p:
+                try: os.remove(p)
+                except: pass
         logger.info("=== Pipeline done ===")
 
     @staticmethod
