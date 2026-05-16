@@ -91,32 +91,36 @@ class FFmpegService:
     def detect_hardware_encoder(self) -> dict:
         """Auto-detect the best available hardware video encoder.
 
-        Returns dict with keys: codec, preset, description
+        Actually tests each encoder with a 1-frame encode — some GPUs
+        list NVENC but fail at runtime (driver issues).
         """
         if not self._ffmpeg_path:
             return {"codec": "libx264", "preset": "ultrafast",
                     "description": "CPU x264 (fallback)"}
 
-        try:
-            result = subprocess.run(
-                [self._ffmpeg_path, "-encoders"],
-                capture_output=True, text=True, timeout=10,
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
-            )
-            encoders = result.stdout + result.stderr
+        def _test_encoder(codec: str, preset: str) -> bool:
+            try:
+                r = subprocess.run(
+                    [self._ffmpeg_path, "-y", "-f", "lavfi", "-i",
+                     "color=c=black:s=32x32:d=0.1", "-t", "0.1",
+                     "-c:v", codec, "-preset", preset, "-pix_fmt", "yuv420p",
+                     "-f", "null", "-"],
+                    capture_output=True, text=True, timeout=10,
+                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+                )
+                return r.returncode == 0
+            except Exception:
+                return False
 
-            # Check GPU encoders in priority order
-            if "h264_nvenc" in encoders:
-                return {"codec": "h264_nvenc", "preset": "p1",
-                        "description": "NVIDIA NVENC GPU"}
-            if "h264_amf" in encoders:
-                return {"codec": "h264_amf", "preset": "speed",
-                        "description": "AMD AMF GPU"}
-            if "h264_qsv" in encoders:
-                return {"codec": "h264_qsv", "preset": "veryfast",
-                        "description": "Intel QSV GPU"}
-        except Exception:
-            pass
+        # Test GPU encoders in priority order
+        for codec, preset, desc in [
+            ("h264_nvenc", "p1", "NVIDIA NVENC GPU"),
+            ("h264_amf", "speed", "AMD AMF GPU"),
+            ("h264_qsv", "veryfast", "Intel QSV GPU"),
+        ]:
+            if _test_encoder(codec, preset):
+                return {"codec": codec, "preset": preset, "description": desc}
+            logger.info(f"Encoder {codec} listed but failed runtime test, skipping")
 
         return {"codec": "libx264", "preset": "ultrafast",
                 "description": "CPU x264"}
