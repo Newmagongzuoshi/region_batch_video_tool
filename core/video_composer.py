@@ -17,6 +17,10 @@ class VideoComposer:
         self._analyzer = AudioAnalyzer(
             ffmpeg_path=self._ffmpeg.ffmpeg_path or "ffmpeg"
         )
+        # Auto-detect hardware encoder once
+        self._encoder = self._ffmpeg.detect_hardware_encoder()
+        logger.info(f"Video encoder: {self._encoder['description']} "
+                    f"({self._encoder['codec']} / {self._encoder['preset']})")
 
     def analyze_source_video(self, video_path: str) -> VideoInfoModel:
         return self._ffmpeg.probe_video(video_path)
@@ -252,15 +256,29 @@ class VideoComposer:
                 )
                 cmd.extend(["-filter_complex", filter_complex, "-map", "[vout]", "-map", "[aout]"])
 
+            enc = self._encoder
+            enc_codec = enc["codec"]
+            enc_preset = enc["preset"]
+
             cmd.extend([
                 "-t", duration_str,
-                "-c:v", "libx264",
-                "-preset", "ultrafast",
+                "-c:v", enc_codec,
+                "-preset", enc_preset,
                 "-pix_fmt", "yuv420p",
                 "-c:a", "aac",
                 "-movflags", "+faststart",
                 output_video_path,
             ])
+            # NVENC-specific: reduce GPU memory usage
+            if "nvenc" in enc_codec:
+                cmd.insert(-8, "-rc")
+                cmd.insert(-8, "vbr")
+                cmd.insert(-8, "-cq")
+                cmd.insert(-8, "23")
+            # QSV-specific
+            if "qsv" in enc_codec:
+                cmd.insert(-8, "-global_quality")
+                cmd.insert(-8, "23")
 
             logger.info(f"FFmpeg compose: overlay=({ox},{oy}) scale={overlay_scale:.3f} filter={filter_complex[:120]}")
 

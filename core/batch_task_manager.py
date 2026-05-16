@@ -15,15 +15,28 @@ from utils.logger import get_logger
 
 logger = get_logger()
 
-# Adaptive concurrency. FFmpeg/TTS are subprocesses that release GIL — oversubscribe CPU.
+# Adaptive concurrency based on encoder type and CPU cores.
 CPU_COUNT = os.cpu_count() or 4
-if CPU_COUNT <= 4:
-    PIPELINE_WORKERS = 8
-elif CPU_COUNT <= 8:
-    PIPELINE_WORKERS = 24
-else:
-    PIPELINE_WORKERS = min(CPU_COUNT * 4, 48)
 MAX_RETRIES = 2
+
+
+def _get_worker_count(encoder_codec: str) -> int:
+    """Adaptive worker count: GPU encoders have limited concurrent sessions."""
+    if "nvenc" in encoder_codec:
+        # NVIDIA NVENC: 2-3 concurrent sessions on consumer GPUs
+        return min(CPU_COUNT, 4)
+    elif "amf" in encoder_codec:
+        return min(CPU_COUNT, 4)
+    elif "qsv" in encoder_codec:
+        return min(CPU_COUNT, 6)
+    else:
+        # CPU x264: oversubscribe but don't thrash
+        if CPU_COUNT <= 4:
+            return 8
+        elif CPU_COUNT <= 8:
+            return 16
+        else:
+            return min(CPU_COUNT * 2, 24)
 
 
 class BatchTaskManager:
@@ -93,7 +106,13 @@ class BatchTaskManager:
         except Exception:
             self._source_loudness = {"mean_volume_db": -20.0}
 
-        logger.info(f"[BATCH] {CPU_COUNT} cores, {PIPELINE_WORKERS} workers")
+        self._worker_count = _get_worker_count(
+            self._composer._encoder["codec"]
+        )
+        logger.info(
+            f"[BATCH] {CPU_COUNT} cores, {self._worker_count} workers, "
+            f"encoder={self._composer._encoder['description']}"
+        )
 
     def run_full_pipeline(self, regions: list[dict], on_progress=None, on_mp4_done=None):
         self._stopped = False
@@ -103,9 +122,9 @@ class BatchTaskManager:
 
         total = len(regions)
         completed = 0
-        logger.info(f"=== Pipeline: {total} regions, {PIPELINE_WORKERS} workers ===")
+        logger.info(f"=== Pipeline: {total} regions, {self._worker_count} workers ===")
 
-        with ThreadPoolExecutor(max_workers=PIPELINE_WORKERS) as ex:
+        with ThreadPoolExecutor(max_workers=self._worker_count) as ex:
             futures = {ex.submit(self._process_one_region, r): r for r in regions}
             for future in as_completed(futures):
                 if self._stopped:

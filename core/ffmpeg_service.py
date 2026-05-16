@@ -88,6 +88,39 @@ class FFmpegService:
             logger.error(f"ffmpeg -version failed: {e}")
             return False
 
+    def detect_hardware_encoder(self) -> dict:
+        """Auto-detect the best available hardware video encoder.
+
+        Returns dict with keys: codec, preset, description
+        """
+        if not self._ffmpeg_path:
+            return {"codec": "libx264", "preset": "ultrafast",
+                    "description": "CPU x264 (fallback)"}
+
+        try:
+            result = subprocess.run(
+                [self._ffmpeg_path, "-encoders"],
+                capture_output=True, text=True, timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            )
+            encoders = result.stdout + result.stderr
+
+            # Check GPU encoders in priority order
+            if "h264_nvenc" in encoders:
+                return {"codec": "h264_nvenc", "preset": "p1",
+                        "description": "NVIDIA NVENC GPU"}
+            if "h264_amf" in encoders:
+                return {"codec": "h264_amf", "preset": "speed",
+                        "description": "AMD AMF GPU"}
+            if "h264_qsv" in encoders:
+                return {"codec": "h264_qsv", "preset": "veryfast",
+                        "description": "Intel QSV GPU"}
+        except Exception:
+            pass
+
+        return {"codec": "libx264", "preset": "ultrafast",
+                "description": "CPU x264"}
+
     def check_ffprobe(self) -> bool:
         if not self._ffprobe_path:
             return False
