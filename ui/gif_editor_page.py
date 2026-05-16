@@ -1008,7 +1008,8 @@ class GifEditorPage(QWidget):
 
         font_family = style.get("font_family", "Microsoft YaHei")
         tl.font_family = font_family
-        tl.font_path = _SYSTEM_FONTS.get(font_family)
+        # Use font manager to resolve both system and built-in fonts
+        tl.font_path = self._font_mgr.get_font_path(font_family)
 
         # font_size and weight always come from the current "{地区}" text.
         # Templates only change colors, stroke, shadow, etc.
@@ -1499,7 +1500,7 @@ class GifEditorPage(QWidget):
 
     def _on_font_changed(self, font_name: str):
         self._text_layer.font_family = font_name
-        self._text_layer.font_path = _SYSTEM_FONTS.get(font_name)
+        self._text_layer.font_path = self._font_mgr.get_font_path(font_name)
         self._render_preview()
 
     def _on_style_changed(self):
