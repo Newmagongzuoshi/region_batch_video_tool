@@ -395,8 +395,8 @@ class BatchTaskManager:
         flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         r = subprocess.run(
             [fex, "-y", "-i", src,
-             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-             "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
+             "-c:v", "libx264", "-preset", "slow", "-crf", "20",
+             "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
              "-movflags", "+faststart", out],
             capture_output=True, text=True, timeout=300,
             creationflags=flags,
