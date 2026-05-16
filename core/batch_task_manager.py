@@ -180,10 +180,27 @@ class BatchTaskManager:
         self._elapsed_sec = 0.0
         t_start = time.time()
 
-        logger.info(f"=== Pipeline: {total} regions, {self._worker_count} workers ===")
-
+        # ---- Phase 1: Pre-generate all TTS in parallel ----
         tts_engine = self._sapi_engine
         use_edge = isinstance(tts_engine, EdgeTTSEngine)
+        tts_workers = min(total, 24 if use_edge else 4)
+        if tts_engine:
+            logger.info(f"=== Phase 1: TTS ({tts_workers} threads) ===")
+            with ThreadPoolExecutor(max_workers=tts_workers) as tts_ex:
+                tts_futures = {}
+                for r in regions:
+                    safe = r["safe_filename"]
+                    mp3_path = os.path.join(self._mp3_temp_dir, f"{safe}.mp3")
+                    if os.path.isfile(mp3_path) and os.path.getsize(mp3_path) > 100:
+                        continue
+                    fut = tts_ex.submit(self._synthesize_tts, tts_engine, r["region"], mp3_path)
+                    tts_futures[fut] = safe
+                for fut in as_completed(tts_futures):
+                    if self._stopped: break
+                    try: fut.result()
+                    except: pass
+
+        logger.info(f"=== Phase 2: GIF+FFmpeg ({self._worker_count} workers) ===")
 
         with ThreadPoolExecutor(max_workers=self._worker_count) as ex:
             futures = {}
@@ -223,39 +240,18 @@ class BatchTaskManager:
             logger.error(f"TTS failed [{region}]: {e}")
             return False
 
-    def _process_one_region_parallel(self, r: dict, tts_engine, use_edge: bool):
-        """Process one region with TTS and GIF running concurrently."""
-        import concurrent.futures as cf
+    def _process_one_region_parallel(self, r: dict, tts_engine=None, use_edge: bool = False):
+        """Process one region: GIF render + FFmpeg compose. TTS is pre-generated."""
         region = r["region"]
         safe = r["safe_filename"]
         mp3_path = os.path.join(self._mp3_temp_dir, f"{safe}.mp3")
         gif_path = os.path.join(self._gif_temp_dir, f"{safe}_{self._style_hash}.gif")
 
-        # TTS and GIF are independent — run them in parallel
-        tts_needed = not (os.path.isfile(mp3_path) and os.path.getsize(mp3_path) > 100)
+        # GIF render
         gif_needed = not (self._existing_file_policy == "skip"
                          and os.path.isfile(gif_path) and os.path.getsize(gif_path) > 0)
-
-        tts_future = None
-        gif_future = None
-
-        with cf.ThreadPoolExecutor(max_workers=2) as pool:
-            if tts_needed and tts_engine:
-                tts_future = pool.submit(self._synthesize_tts, tts_engine, region, mp3_path)
-            if gif_needed:
-                gif_future = pool.submit(self._render_gif, region, safe, gif_path)
-
-            # Wait for both
-            if tts_future:
-                try:
-                    tts_future.result()
-                except Exception:
-                    pass
-            if gif_future:
-                try:
-                    gif_future.result()
-                except Exception:
-                    pass
+        if gif_needed:
+            self._render_gif(region, safe, gif_path)
 
         if self._stopped:
             return
