@@ -260,10 +260,24 @@ class VideoComposer:
             enc_codec = enc["codec"]
             enc_preset = enc["preset"]
 
+            # Quality flags per encoder (prevents blurry GPU output)
+            quality_flags = []
+            if "nvenc" in enc_codec:
+                quality_flags = ["-cq", "20", "-rc", "vbr"]
+            elif "amf" in enc_codec:
+                quality_flags = ["-qp_i", "20", "-qp_p", "22", "-quality", "quality"]
+            elif "qsv" in enc_codec:
+                quality_flags = ["-global_quality", "20"]
+            elif "mf" in enc_codec:
+                quality_flags = ["-q:v", "2"]
+
             cmd.extend([
                 "-t", duration_str,
                 "-c:v", enc_codec,
                 "-preset", enc_preset,
+            ])
+            cmd.extend(quality_flags)
+            cmd.extend([
                 "-pix_fmt", "yuv420p",
                 "-c:a", "aac",
                 "-movflags", "+faststart",

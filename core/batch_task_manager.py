@@ -378,11 +378,19 @@ class BatchTaskManager:
         ff = FFmpegService()
         fex = ff.ffmpeg_path or "ffmpeg"
         enc = self._composer._encoder
+        codec = enc["codec"]
+        # Quality flags (same as video_composer)
+        qf = []
+        if "nvenc" in codec:    qf = ["-cq", "20", "-rc", "vbr"]
+        elif "amf" in codec:    qf = ["-qp_i", "20", "-qp_p", "22", "-quality", "quality"]
+        elif "qsv" in codec:    qf = ["-global_quality", "20"]
+        elif "mf" in codec:     qf = ["-q:v", "2"]
+
         flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         r = subprocess.run(
             [fex, "-y", "-ss", str(split_time), "-i", src,
-             "-c:v", enc["codec"], "-preset", enc["preset"],
-             "-pix_fmt", "yuv420p", "-c:a", "aac",
+             "-c:v", codec, "-preset", enc["preset"]] + qf +
+            ["-pix_fmt", "yuv420p", "-c:a", "aac",
              "-movflags", "+faststart", out],
             capture_output=True, text=True, timeout=120,
             creationflags=flags,
