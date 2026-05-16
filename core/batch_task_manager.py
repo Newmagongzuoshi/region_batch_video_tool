@@ -130,7 +130,7 @@ class BatchTaskManager:
         os.makedirs(self._output_video_dir, exist_ok=True)
         os.makedirs(self._report_dir, exist_ok=True)
 
-        self._video_info = self._ffmpeg.probe_video(self._source_video_path)
+        self._video_info = self._ffmpeg.probe_video(source_video_path)
         self._video_has_audio = self._video_info.has_audio
         self._video_duration = self._video_info.duration
 
