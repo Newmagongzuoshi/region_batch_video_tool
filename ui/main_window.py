@@ -227,8 +227,9 @@ class MainWindow(QMainWindow):
         voice_page = self._pages["语音设置"]
         tts_engine = voice_page.get_engine()
 
-        # Read current text layer directly from editor (not cached copy — may be stale)
-        current_text_layer = gif_page.get_text_layer()
+        # Clone the current text layer to capture a snapshot.
+        # This prevents any subsequent UI changes from affecting the batch.
+        current_text_layer = gif_page.get_text_layer().clone()
 
         self._batch_manager.initialize(
             gif_decoder=gif_decoder,
