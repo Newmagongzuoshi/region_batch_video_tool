@@ -307,18 +307,24 @@ class BatchPage(QWidget):
         self._elapsed_timer.timeout.connect(self._tick_timer)
         self._elapsed_timer.start(200)
 
-        # Disconnect previous worker to avoid duplicate finished dialogs
+        # Increment generation ID so stale workers are ignored
+        self._gen_id = getattr(self, '_gen_id', 0) + 1
+        gen_id = self._gen_id
+
+        # Stop and disconnect previous worker
         if self._worker:
             try:
-                self._worker.progress.disconnect(self._on_progress)
-                self._worker.mp4_log.disconnect(self._on_mp4_log)
-                self._worker.finished.disconnect(self._on_finished)
+                self._worker.progress.disconnect()
+                self._worker.mp4_log.disconnect()
+                self._worker.finished.disconnect()
             except RuntimeError:
                 pass
+            self._worker = None
+
         self._worker = BatchWorker(self._manager, regions)
         self._worker.progress.connect(self._on_progress)
         self._worker.mp4_log.connect(self._on_mp4_log)
-        self._worker.finished.connect(self._on_finished)
+        self._worker.finished.connect(lambda: self._on_finished(gen_id))
         self._worker.start()
 
     def _tick_timer(self):
@@ -348,7 +354,10 @@ class BatchPage(QWidget):
             f'<span style="color:{color}">[{icon}] {region}.mp4</span>'
         )
 
-    def _on_finished(self):
+    def _on_finished(self, gen_id: int = 0):
+        # Ignore stale callbacks from previous generations
+        if gen_id and gen_id != getattr(self, '_gen_id', 0):
+            return
         self._running = False
         self._start_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
