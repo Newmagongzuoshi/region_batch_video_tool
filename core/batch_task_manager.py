@@ -180,37 +180,48 @@ class BatchTaskManager:
         self._elapsed_sec = 0.0
         t_start = time.time()
 
-        # ---- Phase 1: Pre-generate all TTS in parallel ----
+        # ---- Async pipeline: TTS pool + FFmpeg pool run concurrently ----
         tts_engine = self._sapi_engine
         use_edge = isinstance(tts_engine, EdgeTTSEngine)
         tts_workers = min(total, 24 if use_edge else 4)
-        if tts_engine:
-            logger.info(f"=== Phase 1: TTS ({tts_workers} threads) ===")
-            with ThreadPoolExecutor(max_workers=tts_workers) as tts_ex:
-                tts_futures = {}
-                for r in regions:
-                    safe = r["safe_filename"]
-                    mp3_path = os.path.join(self._mp3_temp_dir, f"{safe}.mp3")
-                    if os.path.isfile(mp3_path) and os.path.getsize(mp3_path) > 100:
-                        continue
-                    fut = tts_ex.submit(self._synthesize_tts, tts_engine, r["region"], mp3_path)
-                    tts_futures[fut] = safe
-                for fut in as_completed(tts_futures):
-                    if self._stopped: break
-                    try: fut.result()
-                    except: pass
 
-        logger.info(f"=== Phase 2: GIF+FFmpeg ({self._worker_count} workers) ===")
+        from threading import Lock
+        mp3_lock = Lock()
 
-        with ThreadPoolExecutor(max_workers=self._worker_count) as ex:
-            futures = {}
+        def _tts_then_submit(r):
+            """Generate TTS, then fire FFmpeg task when done."""
+            safe = r["safe_filename"]
+            mp3_path = os.path.join(self._mp3_temp_dir, f"{safe}.mp3")
+            if not (os.path.isfile(mp3_path) and os.path.getsize(mp3_path) > 100):
+                if tts_engine:
+                    self._synthesize_tts(tts_engine, r["region"], mp3_path)
+            # TTS done → submit GIF+FFmpeg to second pool
+            with mp3_lock:
+                ff_futures.append(ff_ex.submit(self._process_one_region_parallel, r))
+                ff_rlookup[id(ff_futures[-1])] = r
+
+        logger.info(f"=== Pipeline: {total} regions, TTS={tts_workers} + FFmpeg={self._worker_count} ===")
+
+        with ThreadPoolExecutor(max_workers=tts_workers) as tts_ex, \
+             ThreadPoolExecutor(max_workers=self._worker_count) as ff_ex:
+
+            ff_futures = []
+            ff_rlookup = {}
+
+            # Submit all TTS tasks — each chains to FFmpeg on completion
+            tts_futures = []
             for r in regions:
-                fut = ex.submit(self._process_one_region_parallel, r, tts_engine, use_edge)
-                futures[fut] = r
-            for future in as_completed(futures):
+                fut = tts_ex.submit(_tts_then_submit, r)
+                tts_futures.append(fut)
+
+            # Wait for FFmpeg tasks to complete (they get added as TTS finishes)
+            import time as _time
+            while len(ff_futures) < total and not self._stopped:
+                _time.sleep(0.05)  # wait for TTS to feed FFmpeg pool
+            for future in as_completed(ff_futures):
                 if self._stopped:
                     break
-                r = futures[future]
+                r = ff_rlookup.get(id(future), {"region": "?", "safe_filename": "?"})
                 try:
                     future.result()
                 except Exception as e:
@@ -240,8 +251,8 @@ class BatchTaskManager:
             logger.error(f"TTS failed [{region}]: {e}")
             return False
 
-    def _process_one_region_parallel(self, r: dict, tts_engine=None, use_edge: bool = False):
-        """Process one region: GIF render + FFmpeg compose. TTS is pre-generated."""
+    def _process_one_region_parallel(self, r: dict):
+        """GIF render + FFmpeg compose. TTS is done before this is called."""
         region = r["region"]
         safe = r["safe_filename"]
         mp3_path = os.path.join(self._mp3_temp_dir, f"{safe}.mp3")
