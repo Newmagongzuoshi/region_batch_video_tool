@@ -140,17 +140,24 @@ class BatchTaskManager:
             self._head_path = os.path.join(cache_dir, f"_head_{src_hash}.mp4")
             self._tail_path = os.path.join(cache_dir, f"_tail_{src_hash}.mp4")
             if not os.path.isfile(self._head_path):
-                logger.info(f"[SPLIT] Cutting head ({self._gif_duration_s:.1f}s) + tail")
+                logger.info(f"[SPLIT] Cutting head ({self._gif_duration_s:.1f}s) with -c copy")
                 try:
                     self._split_source(source_video_path, self._head_path, self._tail_path,
                                        self._gif_duration_s)
                 except Exception as e:
                     logger.warning(f"[SPLIT] Failed: {e}")
+            # Re-encode tail with GPU for frame accuracy — cached, one-time cost
             if os.path.isfile(self._head_path) and os.path.getsize(self._head_path) > 1000:
                 self._head_info = self._ffmpeg.probe_video(self._head_path)
-                if self._head_info.duration > 0.1:
+                if self._head_info.duration > 0.1 and os.path.isfile(self._tail_path):
+                    tail_enc = self._tail_path.replace(".mp4", "_enc.mp4")
+                    if not os.path.isfile(tail_enc):
+                        logger.info(f"[SPLIT] Re-encoding tail for frame accuracy")
+                        self._encode_tail(source_video_path, tail_enc, self._gif_duration_s)
+                    if os.path.isfile(tail_enc) and os.path.getsize(tail_enc) > 1000:
+                        self._tail_path = tail_enc  # use re-encoded version
                     self._use_split = True
-                    self._tail_ready = os.path.isfile(self._tail_path) and os.path.getsize(self._tail_path) > 1000
+                    self._tail_ready = True
                     logger.info(f"[SPLIT] OK: head={self._head_info.duration:.1f}s")
 
         self._worker_count = _get_worker_count(
@@ -357,6 +364,24 @@ class BatchTaskManager:
         self._find_result(safe)["mp4"] = "fail"
         self._find_result(safe)["error"] = "FFmpeg failed"
         self._cleanup_temp(gif_path, mp3_path)
+
+    def _encode_tail(self, src: str, out: str, split_time: float):
+        """Re-encode tail segment with GPU for frame-accurate start. Cached."""
+        import subprocess, sys
+        ff = FFmpegService()
+        fex = ff.ffmpeg_path or "ffmpeg"
+        enc = self._composer._encoder
+        flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        r = subprocess.run(
+            [fex, "-y", "-ss", str(split_time), "-i", src,
+             "-c:v", enc["codec"], "-preset", enc["preset"],
+             "-pix_fmt", "yuv420p", "-c:a", "aac",
+             "-movflags", "+faststart", out],
+            capture_output=True, text=True, timeout=120,
+            creationflags=flags,
+        )
+        if r.returncode != 0:
+            raise RuntimeError(f"Tail encode failed: {(r.stderr or '')[-200:]}")
 
     @staticmethod
     def _split_source(src: str, head: str, tail: str, split_time: float):
