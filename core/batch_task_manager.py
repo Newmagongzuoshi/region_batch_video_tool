@@ -276,6 +276,7 @@ class BatchTaskManager:
                 ok = self._compose_mp4_fast(gif_path, adjusted_mp3, mp4_path, safe)
                 if ok and os.path.isfile(mp4_path) and os.path.getsize(mp4_path) > 0:
                     self._find_result(safe)["mp4"] = "ok"
+                    self._cleanup_temp(gif_path, mp3_path, adjusted_mp3)
                     return
             except Exception as e:
                 logger.error(f"MP4 error [{region}]: {e}")
@@ -284,6 +285,7 @@ class BatchTaskManager:
 
         self._find_result(safe)["mp4"] = "fail"
         self._find_result(safe)["error"] = "FFmpeg failed"
+        self._cleanup_temp(gif_path, mp3_path)
 
     def _render_gif(self, region: str, safe: str, gif_path: str):
         """Generate one GIF (called in parallel with TTS)."""
@@ -339,6 +341,7 @@ class BatchTaskManager:
                 ok = self._compose_mp4_fast(gif_path, adjusted_mp3, mp4_path, safe)
                 if ok and os.path.isfile(mp4_path) and os.path.getsize(mp4_path) > 0:
                     self._find_result(safe)["mp4"] = "ok"
+                    self._cleanup_temp(gif_path, mp3_path, adjusted_mp3)
                     return
             except Exception as e:
                 logger.error(f"MP4 error [{region}]: {e}")
@@ -347,6 +350,7 @@ class BatchTaskManager:
 
         self._find_result(safe)["mp4"] = "fail"
         self._find_result(safe)["error"] = "FFmpeg failed"
+        self._cleanup_temp(gif_path, mp3_path)
 
     @staticmethod
     def _split_source(src: str, head: str, tail: str, split_time: float):
