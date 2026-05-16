@@ -116,8 +116,11 @@ class BatchTaskManager:
 
         if self._video_duration > self._gif_duration_s + 0.5:
             cache_dir = self._cache_mgr._video_temp_dir
-            self._head_path = os.path.join(cache_dir, "_source_head.mp4")
-            self._tail_path = os.path.join(cache_dir, "_source_tail.mp4")
+            # Include source filename in cache key — different videos get different splits
+            import hashlib
+            src_hash = hashlib.md5(source_video_path.encode()).hexdigest()[:8]
+            self._head_path = os.path.join(cache_dir, f"_head_{src_hash}.mp4")
+            self._tail_path = os.path.join(cache_dir, f"_tail_{src_hash}.mp4")
             if not os.path.isfile(self._head_path):
                 logger.info(f"[SPLIT] Cutting head ({self._gif_duration_s:.1f}s) + tail from source")
                 try:
