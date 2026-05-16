@@ -156,48 +156,16 @@ class BatchTaskManager:
         self._elapsed_sec = 0.0
         t_start = time.time()
 
-        # ---- Pre-generate all TTS in parallel ----
-        logger.info(f"=== Pre-generating TTS for {total} regions ===")
-        tts_engine = self._sapi_engine
-        use_edge = isinstance(tts_engine, EdgeTTSEngine)
-        if use_edge:
-            logger.info(f"TTS: Edge TTS (voice={getattr(tts_engine, '_voice', '?')}) 24-thread concurrent")
-        elif tts_engine:
-            logger.info(f"TTS: {tts_engine.engine_name} 4-thread (serial-limited)")
-        else:
-            logger.warning("TTS: No engine available!")
-
-        # Generate all MP3s concurrently
-        tts_workers = min(total, 24 if use_edge else 4)  # Edge=unlimited, SAPI=limited
-        tts_total = 0
-        tts_done = 0
-        with ThreadPoolExecutor(max_workers=tts_workers) as tts_ex:
-            tts_futures = {}
-            for r in regions:
-                region = r["region"]
-                safe = r["safe_filename"]
-                mp3_path = os.path.join(self._mp3_temp_dir, f"{safe}.mp3")
-                if os.path.isfile(mp3_path) and os.path.getsize(mp3_path) > 100:
-                    continue  # cached
-                fut = tts_ex.submit(self._synthesize_tts, tts_engine, region, safe, mp3_path, use_edge)
-                tts_futures[fut] = (safe, region)
-                tts_total += 1
-            for fut in as_completed(tts_futures):
-                if self._stopped:
-                    break
-                safe, region = tts_futures[fut]
-                try:
-                    fut.result()
-                except Exception:
-                    pass
-                tts_done += 1
-                if on_progress:
-                    on_progress("tts", {"current": tts_done, "total": tts_total})
-
         logger.info(f"=== Pipeline: {total} regions, {self._worker_count} workers ===")
 
+        tts_engine = self._sapi_engine
+        use_edge = isinstance(tts_engine, EdgeTTSEngine)
+
         with ThreadPoolExecutor(max_workers=self._worker_count) as ex:
-            futures = {ex.submit(self._process_one_region, r): r for r in regions}
+            futures = {}
+            for r in regions:
+                fut = ex.submit(self._process_one_region_parallel, r, tts_engine, use_edge)
+                futures[fut] = r
             for future in as_completed(futures):
                 if self._stopped:
                     break
@@ -218,16 +186,93 @@ class BatchTaskManager:
         logger.info("=== Pipeline done ===")
 
     @staticmethod
-    def _synthesize_tts(engine, region: str, safe: str, mp3_path: str, is_edge: bool):
-        """Generate one MP3 via TTS engine (called in parallel)."""
+    def _synthesize_tts(engine, region: str, mp3_path: str):
+        """Generate one MP3 via TTS engine."""
         try:
-            if is_edge:
-                return engine.synthesize(region, "", mp3_path)
-            else:
-                return engine.synthesize(region, "", mp3_path)
+            return engine.synthesize(region, "", mp3_path)
         except Exception as e:
             logger.error(f"TTS failed [{region}]: {e}")
             return False
+
+    def _process_one_region_parallel(self, r: dict, tts_engine, use_edge: bool):
+        """Process one region with TTS and GIF running concurrently."""
+        import concurrent.futures as cf
+        region = r["region"]
+        safe = r["safe_filename"]
+        mp3_path = os.path.join(self._mp3_temp_dir, f"{safe}.mp3")
+        gif_path = os.path.join(self._gif_temp_dir, f"{safe}.gif")
+
+        # TTS and GIF are independent — run them in parallel
+        tts_needed = not (os.path.isfile(mp3_path) and os.path.getsize(mp3_path) > 100)
+        gif_needed = not (self._existing_file_policy == "skip"
+                         and os.path.isfile(gif_path) and os.path.getsize(gif_path) > 0)
+
+        tts_future = None
+        gif_future = None
+
+        with cf.ThreadPoolExecutor(max_workers=2) as pool:
+            if tts_needed and tts_engine:
+                tts_future = pool.submit(self._synthesize_tts, tts_engine, region, mp3_path)
+            if gif_needed:
+                gif_future = pool.submit(self._render_gif, region, safe, gif_path)
+
+            # Wait for both
+            if tts_future:
+                try:
+                    tts_future.result()
+                except Exception:
+                    pass
+            if gif_future:
+                try:
+                    gif_future.result()
+                except Exception:
+                    pass
+
+        if self._stopped:
+            return
+
+        # Verify results
+        if not os.path.isfile(gif_path) or os.path.getsize(gif_path) <= 0:
+            self._find_result(safe)["mp4"] = "fail"
+            self._find_result(safe)["error"] = "GIF render failed"
+            return
+        if not os.path.isfile(mp3_path) or os.path.getsize(mp3_path) <= 100:
+            self._find_result(safe)["mp4"] = "fail"
+            self._find_result(safe)["error"] = "TTS failed"
+            return
+
+        # --- MP4 composition ---
+        mp4_path = os.path.join(self._output_video_dir, f"{safe}.mp4")
+        if self._existing_file_policy == "skip" and os.path.isfile(mp4_path) and os.path.getsize(mp4_path) > 0:
+            self._find_result(safe)["mp4"] = "ok"
+            return
+
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                adjusted_mp3 = os.path.join(self._cache_mgr._audio_temp_dir,
+                                            f"{safe}_adjusted.mp3")
+                try:
+                    self._composer.adjust_region_mp3_volume_cached(
+                        self._source_loudness, mp3_path, adjusted_mp3)
+                except Exception:
+                    adjusted_mp3 = mp3_path
+
+                ok = self._compose_mp4_fast(gif_path, adjusted_mp3, mp4_path, safe)
+                if ok and os.path.isfile(mp4_path) and os.path.getsize(mp4_path) > 0:
+                    self._find_result(safe)["mp4"] = "ok"
+                    return
+            except Exception as e:
+                logger.error(f"MP4 error [{region}]: {e}")
+            if attempt < MAX_RETRIES:
+                logger.warning(f"MP4 retry {attempt+1}: {region}")
+
+        self._find_result(safe)["mp4"] = "fail"
+        self._find_result(safe)["error"] = "FFmpeg failed"
+
+    def _render_gif(self, region: str, safe: str, gif_path: str):
+        """Generate one GIF (called in parallel with TTS)."""
+        return self._gif_service.render_one(
+            region, safe, self._gif_text_layer, gif_path, "", skip_png=True)
 
     def _process_one_region(self, r: dict):
         region = r["region"]
