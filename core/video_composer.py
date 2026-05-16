@@ -269,16 +269,6 @@ class VideoComposer:
                 "-movflags", "+faststart",
                 output_video_path,
             ])
-            # NVENC-specific: reduce GPU memory usage
-            if "nvenc" in enc_codec:
-                cmd.insert(-8, "-rc")
-                cmd.insert(-8, "vbr")
-                cmd.insert(-8, "-cq")
-                cmd.insert(-8, "23")
-            # QSV-specific
-            if "qsv" in enc_codec:
-                cmd.insert(-8, "-global_quality")
-                cmd.insert(-8, "23")
 
             logger.info(f"FFmpeg compose: overlay=({ox},{oy}) scale={overlay_scale:.3f} filter={filter_complex[:120]}")
 
