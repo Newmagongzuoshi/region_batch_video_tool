@@ -125,13 +125,32 @@ class BatchTaskManager:
         except Exception:
             self._source_loudness = {"mean_volume_db": -20.0}
 
-        # Split disabled: -c copy can't do frame-accurate cuts, tail shows glitches.
-        # GPU full-source encode is fast enough (~0.5s/video).
+        # ---- Pre-split source video ----
+        # Encode BOTH head and tail with GPU to ensure frame-accurate alignment.
+        # Head = source(0..gif_dur) + GIF overlay, Tail = source(gif_dur..end)
+        # Both use same encoder → concat with -c copy works perfectly.
         self._gif_duration_s = sum(self._gif_durations) / 1000.0
-        self._use_split = False
         self._head_path = ""
         self._tail_path = ""
         self._head_info = self._video_info
+        self._use_split = self._video_duration > self._gif_duration_s + 0.5
+        self._tail_ready = False
+
+        if self._use_split:
+            cache_dir = self._cache_mgr._video_temp_dir
+            import hashlib
+            src_hash = hashlib.md5(source_video_path.encode()).hexdigest()[:8]
+            self._head_path = os.path.join(cache_dir, f"_head_{src_hash}.mp4")
+            self._tail_path = os.path.join(cache_dir, f"_tail_{src_hash}.mp4")
+            # Pre-encode tail once with GPU (no GIF) — frame-accurate, ~1-2s
+            if not os.path.isfile(self._tail_path):
+                logger.info(f"[SPLIT] Encoding tail ({self._gif_duration_s:.1f}s to end)")
+                self._encode_tail(source_video_path, self._tail_path,
+                                  self._gif_duration_s)
+            if os.path.isfile(self._tail_path) and os.path.getsize(self._tail_path) > 1000:
+                self._tail_ready = True
+                self._head_info = self._ffmpeg.probe_video(self._tail_path)  # same encoder
+                logger.info(f"[SPLIT] Tail ready, head will be encoded per-region")
 
         self._worker_count = _get_worker_count(
             self._composer._encoder["codec"]
@@ -338,6 +357,24 @@ class BatchTaskManager:
         self._find_result(safe)["error"] = "FFmpeg failed"
         self._cleanup_temp(gif_path, mp3_path)
 
+    def _encode_tail(self, src: str, out: str, split_time: float):
+        """Encode tail segment with GPU (same encoder as head) once."""
+        import subprocess, sys
+        ff = FFmpegService()
+        fex = ff.ffmpeg_path or "ffmpeg"
+        enc = self._composer._encoder
+        flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        r = subprocess.run(
+            [fex, "-y", "-ss", str(split_time), "-i", src,
+             "-c:v", enc["codec"], "-preset", enc["preset"],
+             "-pix_fmt", "yuv420p", "-c:a", "aac",
+             "-movflags", "+faststart", out],
+            capture_output=True, text=True, timeout=120,
+            creationflags=flags,
+        )
+        if r.returncode != 0:
+            raise RuntimeError(f"Tail encode failed: {(r.stderr or '')[-200:]}")
+
     @staticmethod
     def _split_source(src: str, head: str, tail: str, split_time: float):
         """Cut source into head (0–split_time) and tail (split_time–end) with copy codec."""
@@ -360,15 +397,14 @@ class BatchTaskManager:
 
     def _compose_mp4_fast(self, gif_path: str, mp3_path: str, output_path: str,
                           safe_name: str) -> bool:
-        """Compose video — uses split+copy-concat when codecs match."""
-        if self._use_split and self._head_path and self._tail_path:
+        """Compose video — uses split+concat when tail is pre-encoded."""
+        if self._tail_ready and self._tail_path:
             import subprocess, sys
             head_out = os.path.join(self._cache_mgr._video_temp_dir,
                                     f"{safe_name}_head.mp4")
-            # Step 1: compose GIF+audio onto head segment with GPU
             ok = self._composer.compose_final_video_cached(
-                self._head_path, gif_path, mp3_path, head_out,
-                video_info=self._head_info,
+                self._source_video_path, gif_path, mp3_path, head_out,
+                video_info=self._video_info,
                 gif_durations=self._gif_durations,
                 overlay_x=self._overlay_x, overlay_y=self._overlay_y,
                 overlay_scale=self._overlay_scale,
@@ -376,47 +412,35 @@ class BatchTaskManager:
             if not ok:
                 return False
 
-            # Step 2: fix H.264 bitstream for concat compatibility (instant, no re-encode)
-            head_fixed = head_out.replace(".mp4", "_fix.mp4")
-            ff = FFmpegService()
-            fex = ff.ffmpeg_path or "ffmpeg"
-            flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-
-            r = subprocess.run(
-                [fex, "-y", "-i", head_out,
-                 "-c", "copy", "-bsf:v", "h264_mp4toannexb",
-                 "-movflags", "+faststart", head_fixed],
-                capture_output=True, text=True, timeout=10,
-                creationflags=flags,
-            )
-            if r.returncode != 0:
-                try: os.remove(head_out)
-                except: pass
-                return self._compose_final_video_full(gif_path, mp3_path, output_path)
-
-            # Step 3: lossless concat — both segments now have compatible bitstreams
             concat_list = os.path.join(self._cache_mgr._video_temp_dir,
                                        f"{safe_name}_clist.txt")
             with open(concat_list, "w", encoding="utf-8") as f:
-                f.write(f"file '{os.path.abspath(head_fixed).replace(chr(92), '/')}'\n")
+                f.write(f"file '{os.path.abspath(head_out).replace(chr(92), '/')}'\n")
                 f.write(f"file '{os.path.abspath(self._tail_path).replace(chr(92), '/')}'\n")
 
-            r2 = subprocess.run(
+            ff = FFmpegService()
+            fex = ff.ffmpeg_path or "ffmpeg"
+            flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            r = subprocess.run(
                 [fex, "-y", "-f", "concat", "-safe", "0", "-i", concat_list,
                  "-c", "copy", "-movflags", "+faststart", output_path],
                 capture_output=True, text=True, timeout=30,
                 creationflags=flags,
             )
-            # Cleanup
-            for p in [head_out, head_fixed, concat_list]:
+            for p in [head_out, concat_list]:
                 try: os.remove(p)
                 except: pass
 
-            if r2.returncode == 0 and os.path.isfile(output_path) and os.path.getsize(output_path) > 0:
+            if r.returncode == 0 and os.path.isfile(output_path) and os.path.getsize(output_path) > 0:
                 return True
-            logger.warning(f"Copy-concat failed, falling back to full source")
+            logger.warning(f"Concat failed, falling back to full source encode")
 
-        return self._compose_final_video_full(gif_path, mp3_path, output_path)
+        return self._composer.compose_final_video_cached(
+            self._source_video_path, gif_path, mp3_path, output_path,
+            video_info=self._video_info, gif_durations=self._gif_durations,
+            overlay_x=self._overlay_x, overlay_y=self._overlay_y,
+            overlay_scale=self._overlay_scale,
+        )
 
     def _compose_final_video_full(self, gif_path: str, mp3_path: str, output_path: str) -> bool:
         """Compose on full source (fallback)."""
