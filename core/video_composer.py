@@ -221,7 +221,13 @@ class VideoComposer:
                 )
                 overlay_input = ["-stream_loop", "-1", "-i", region_gif_path]
 
-            cmd = [ffmpeg_exe, "-y", "-i", source_video_path]
+            cmd = [ffmpeg_exe, "-y"]
+            # Hardware acceleration: decode source video on GPU
+            if "qsv" in self._encoder["codec"]:
+                cmd.extend(["-hwaccel", "qsv", "-hwaccel_output_format", "qsv"])
+            elif "nvenc" in self._encoder["codec"]:
+                cmd.extend(["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"])
+            cmd.extend(["-i", source_video_path])
             cmd.extend(overlay_input)
             cmd.extend(["-i", region_mp3_path])
 
