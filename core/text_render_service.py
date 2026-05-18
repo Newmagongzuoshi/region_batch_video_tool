@@ -247,11 +247,16 @@ class TextRenderService:
                                   color=(*fill_rgb, fill_alpha),
                                   weight_offset=weight_offset)
 
-        # Crop to content
+        # Crop to content with margin on all sides
         alpha = img.split()[-1]
         bbox = alpha.getbbox()
         if bbox:
-            img = img.crop(bbox)
+            margin = max(4, layer.font_size // 16)
+            left = max(0, bbox[0] - margin)
+            top = max(0, bbox[1] - margin)
+            right = min(img.width, bbox[2] + margin)
+            bottom = min(img.height, bbox[3] + margin)
+            img = img.crop((left, top, right, bottom))
         return img
 
     # ---- dashed border helper ----
