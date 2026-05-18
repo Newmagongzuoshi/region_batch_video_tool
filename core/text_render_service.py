@@ -89,16 +89,18 @@ class TextRenderService:
             text = "\n".join(text)
         lines = text.split("\n")
 
-        # Measure each line (accounting for letter spacing)
+        # Measure each line using font metrics (more accurate than bbox)
+        ascent, descent = font.getmetrics()
+        line_height = ascent + descent
         line_sizes: list[tuple[int, int]] = []
         for line in lines:
             if layer.letter_spacing > 0:
-                spaced_line = " ".join(line)  # approximate spacing
+                spaced_line = " ".join(line)
                 bbox = font.getbbox(spaced_line)
             else:
                 bbox = font.getbbox(line)
             lw = bbox[2] - bbox[0]
-            lh = bbox[3] - bbox[1]
+            lh = max(line_height, bbox[3] - bbox[1])
             line_sizes.append((lw, lh))
 
         text_w = max((w for w, _ in line_sizes), default=0)
@@ -115,8 +117,8 @@ class TextRenderService:
         pad_top = max(stroke_pad, shadow_pad_y, bg_pad)
         pad_bottom = max(stroke_pad, shadow_pad_y, bg_pad)
 
-        # Extra padding: font descenders + weight offset may extend below bbox
-        extra_pad = max(4, layer.font_size // 12)
+        # Extra padding: font descenders + weight offset may extend beyond bbox
+        extra_pad = max(8, layer.font_size // 6)
         img_w = text_w + pad_left + pad_right + 10 + extra_pad
         img_h = text_h + pad_top + pad_bottom + 10 + extra_pad
 
