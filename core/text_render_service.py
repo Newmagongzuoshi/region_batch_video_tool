@@ -115,15 +115,17 @@ class TextRenderService:
         pad_top = max(stroke_pad, shadow_pad_y, bg_pad)
         pad_bottom = max(stroke_pad, shadow_pad_y, bg_pad)
 
-        img_w = text_w + pad_left + pad_right + 10
-        img_h = text_h + pad_top + pad_bottom + 10
+        # Extra padding: font descenders + weight offset may extend below bbox
+        extra_pad = max(4, layer.font_size // 12)
+        img_w = text_w + pad_left + pad_right + 10 + extra_pad
+        img_h = text_h + pad_top + pad_bottom + 10 + extra_pad
 
         img = Image.new("RGBA", (img_w, img_h), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
 
         # Text origin (left edge of first line, relative to pad)
-        origin_x = pad_left + 5
-        origin_y = pad_top + 5
+        origin_x = pad_left + 5 + extra_pad // 2
+        origin_y = pad_top + 5 + extra_pad // 2
 
         # ---- background box ----
         if layer.background_enabled:
