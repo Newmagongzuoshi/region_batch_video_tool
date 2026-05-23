@@ -249,13 +249,19 @@ class BatchTaskManager:
         logger.info("=== Pipeline done ===")
 
     @staticmethod
+    @staticmethod
     def _synthesize_tts(engine, region: str, mp3_path: str):
-        """Generate one MP3 via TTS engine."""
-        try:
-            return engine.synthesize(region, "", mp3_path)
-        except Exception as e:
-            logger.error(f"TTS failed [{region}]: {e}")
-            return False
+        """Generate one MP3 via TTS engine. Retry up to 3 times."""
+        for attempt in range(3):
+            try:
+                if engine.synthesize(region, "", mp3_path):
+                    return True
+            except Exception as e:
+                logger.warning(f"TTS attempt {attempt+1}/3 [{region}]: {e}")
+            if attempt < 2:
+                time.sleep(1)
+        logger.error(f"TTS failed after 3 retries [{region}]")
+        return False
 
     def _process_one_region_parallel(self, r: dict):
         """GIF render + FFmpeg compose. TTS is done before this is called."""
