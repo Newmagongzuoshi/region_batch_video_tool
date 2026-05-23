@@ -1,6 +1,7 @@
 import os
 import time
 import json
+import tempfile
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -235,11 +236,16 @@ class BatchTaskManager:
 
         self._elapsed_sec = time.time() - t_start
         self._write_report()
-        # Cleanup pre-split head/tail after batch completes
+        # Cleanup temp files after batch completes
         for p in [self._head_path, self._tail_path]:
             if p:
                 try: os.remove(p)
                 except: pass
+        # Cleanup preview frame PNG
+        preview_png = os.path.join(tempfile.gettempdir(), "_rbvt_preview_frame.png")
+        if os.path.isfile(preview_png):
+            try: os.remove(preview_png)
+            except: pass
         logger.info("=== Pipeline done ===")
 
     @staticmethod
