@@ -1061,6 +1061,10 @@ class GifEditorPage(QWidget):
 
         tmp_dir = tempfile.gettempdir()
         self._preview_frame_path = os.path.join(tmp_dir, "_rbvt_preview_frame.png")
+        # Remove leftover from previous session
+        if os.path.isfile(self._preview_frame_path):
+            try: os.remove(self._preview_frame_path)
+            except: pass
         ok = self._ffmpeg.extract_first_frame(self._video_path, self._preview_frame_path)
         if not ok:
             self._preview_btn.setChecked(False)
