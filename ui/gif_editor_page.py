@@ -985,6 +985,8 @@ class GifEditorPage(QWidget):
         self._canvas.set_decoder(self._decoder)
         self._canvas.zoom_fit()
         self._update_gif_info_label()
+        # Reset play button state since set_decoder() stops animation
+        self._play_btn.setText("▶ 播放")
 
     def set_video_path(self, video_path: str):
         self._video_path = video_path
@@ -1043,8 +1045,9 @@ class GifEditorPage(QWidget):
     # === Preview mode ===
     def enter_preview_mode(self):
         """Public: activate video preview (called from import flow)."""
+        # Force refresh: exit + re-enter to get fresh first frame
         if self._preview_btn.isChecked():
-            return  # already in preview
+            self._exit_preview_mode()
         self._preview_btn.setChecked(True)
         self._enter_preview_mode()
 
