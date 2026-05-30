@@ -21,12 +21,12 @@ VSVersionInfo(
         u'080404b0',
         [StringStruct(u'CompanyName', u'矩量拓客'),
         StringStruct(u'FileDescription', u'地区视频批量生成工具 - 自适应GPU编码 + 剪映级花字库'),
-        StringStruct(u'FileVersion', u'1.6.4'),
+        StringStruct(u'FileVersion', u'1.6.5'),
         StringStruct(u'InternalName', u'RegionBatchVideoTool'),
         StringStruct(u'LegalCopyright', u'Copyright (c) 2025-2026'),
         StringStruct(u'OriginalFilename', u'矩量拓客-地区视频批量生成.exe'),
         StringStruct(u'ProductName', u'矩量拓客 - 地区视频批量生成'),
-        StringStruct(u'ProductVersion', u'1.6.4')])
+        StringStruct(u'ProductVersion', u'1.6.5')])
       ]),
     VarFileInfo([VarStruct(u'Translation', [0x0804, 0x04b0])])
   ]
