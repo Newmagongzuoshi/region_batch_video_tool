@@ -160,7 +160,7 @@ class GifEditorPage(QWidget):
         # Persistent overlay position (survives preview on/off)
         self._overlay_x: int = 0
         self._overlay_y: int = 0
-        self._overlay_scale: float = 1.685
+        self._overlay_scale: float = 1.0  # auto-computed on preview
 
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -945,7 +945,7 @@ class GifEditorPage(QWidget):
         scale_row = QHBoxLayout()
         scale_row.addWidget(QLabel("缩放:"))
         self._gif_scale_spin = QDoubleSpinBox(); self._gif_scale_spin.setRange(0.1, 3.0)
-        self._gif_scale_spin.setSingleStep(0.05); self._gif_scale_spin.setValue(1.685)
+        self._gif_scale_spin.setSingleStep(0.05); self._gif_scale_spin.setValue(1.0)
         self._gif_scale_spin.wheelEvent = lambda e: e.ignore()
         self._gif_scale_spin.valueChanged.connect(self._on_gif_scale_changed)
         scale_row.addWidget(self._gif_scale_spin); scale_row.addStretch()
@@ -1077,6 +1077,13 @@ class GifEditorPage(QWidget):
         self._canvas.zoom_fit()
         self._preview_group.setVisible(True)
         self._bg_combo.setEnabled(False)
+
+        # Auto-scale GIF to match video frame height
+        if self._decoder:
+            gif_w, gif_h = self._decoder.get_size()
+            video_info = self._ffmpeg.probe_video(self._video_path)
+            if video_info.height > 0 and gif_h > 0:
+                self._overlay_scale = round(video_info.height / gif_h, 3)
 
         # Restore saved position (not reset!)
         self._canvas.set_gif_position(self._overlay_x, self._overlay_y)
@@ -1408,7 +1415,7 @@ class GifEditorPage(QWidget):
     def _reset_gif_position(self):
         self._gif_x_spin.setValue(0)
         self._gif_y_spin.setValue(0)
-        self._gif_scale_spin.setValue(1.685)
+        self._gif_scale_spin.setValue(1.0)
 
     # === Internal ===
     def _update_gif_info_label(self):
