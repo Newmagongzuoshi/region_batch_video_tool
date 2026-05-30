@@ -1,94 +1,118 @@
-# 矩量拓客：地区视频批量生成
+# 矩量拓客：地区视频批量生成 v1.6.5
 
-导入元视频、透明 GIF 动图和地区列表，批量生成带文字叠加和语音配音的地区化 MP4 短视频。
+> 导入元视频、透明 GIF 和地区列表，自动提取 GIF 花字颜色，批量生成带文字叠加和语音的地区化短视频。240 个视频约 30 秒。
 
-## 核心功能
+[![Version](https://img.shields.io/badge/version-1.6.5-blue)](https://github.com/Newmagongzuoshi/region_batch_video_tool)
+[![Python](https://img.shields.io/badge/python-3.11+-green)](https://www.python.org/)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey)]()
 
-1. **素材导入** — 导入元视频(MP4)、元GIF动图、地区列表(TXT)，自动检测素材合法性
-2. **GIF 编辑** — 可视化拖动文字图层、50 套剪映风格花字模板（经典/阴影/霓虹/标签/描边）
-3. **视频预览** — 截取视频首帧为背景，拖动 GIF 叠加层实时预览合成效果，支持缩放定位
-4. **语音设置** — 多引擎：Edge TTS(微软免费)、Piper TTS(本地离线)、Windows SAPI5、火山引擎
-5. **批量生成** — 自适应并发流水线，一键生成所有地区 MP4，带实时计时器和生成日志
-6. **输出报告** — 自动生成 `AA视频生成报告.txt`，列出成功/失败清单
+## ✨ 项目亮点
 
-## 运行环境
+- **10 倍性能**：TTS 异步并发 + GPU 硬件编码 + head/tail 分段复用，240 视频 5 分钟 → 30 秒
+- **自适应硬件**：自动检测 NVENC/AMF/QSV/Media Foundation，无 GPU 回退 CPU x264
+- **100 个花字模板**：5 大类别（爆款促销 / 蓝青科技 / 白字双层描边 / 金属重工 / 渐变流光）
+- **5 个内置字体**：思源黑体 Bold/Regular/Heavy、霞鹜文楷、Noto Sans SC，无需系统安装
+- **素材检查自动配色**：检测 GIF 花字的填充色和描边色，自动应用到 {地区} 文字
 
-- Windows 10 / 11 64 位
-- Python 3.11+
-- FFmpeg（ffmpeg.exe + ffprobe.exe）
-
-## 快速开始
+## 📦 快速开始
 
 ```bash
-# 安装依赖
 pip install -r requirements.txt
-
-# 运行软件
 python main.py
 ```
 
-## 使用流程
+打包 EXE：
+```bash
+python build_exe.py   # 输出 矩量拓客-地区视频批量生成-v1.6.x.exe 到桌面
+```
 
-1. 「素材导入」→ 选择元视频、元GIF、地区.txt，点击「检查素材」
-2. 「GIF 编辑」→ 添加文字并拖动定位，选择花字模板，调整描边/阴影/渐变
-3. 「视频预览」→ 查看合成效果，拖动 GIF 位置，调整缩放
-4. 「语音设置」→ 选择 TTS 引擎和音色，点击「试听」
-5. 「批量生成」→ 点击「开始生成」，查看实时进度
+## 🚀 使用流程
 
-## 语音引擎
+1. **素材导入** → 选元视频 MP4 + 元 GIF + 地区 TXT，点击检查素材
+2. **GIF 编辑** → 自动进入视频预览，自动添加 {地区} 文字并匹配花字颜色
+3. **选择模板** → 100 个花字样式一键套用，描边/渐变/阴影/双层描边可调
+4. **调整位置** → 拖动 GIF 和文字到合适位置，缩放倍数自动匹配视频高度
+5. **批量生成** → 一键生成所有地区 MP4，实时进度 + 生成报告
+
+## 🎨 花字模板（100 个)
+
+| 类别 | 数量 | 风格 |
+|------|------|------|
+| 爆款促销风 | 20 | 红+金、黑边阴影 |
+| 蓝青科技风 | 20 | 蓝+青 glow、新闻风 |
+| 白字双层描边风 | 20 | 白字芯 + 内外双描边 |
+| 金属重工风 | 20 | 黄金+黑描边厚重风格 |
+| 渐变流光风 | 20 | 3-stop 渐变，4 方向 |
+
+## 🎤 语音引擎
 
 | 引擎 | 说明 | 网络 | Key |
 |------|------|------|-----|
-| Edge TTS | 微软免费神经网络，8 个中文音色 | 需要 | 否 |
-| Piper TTS | 本地离线 AI，首次自动下载模型 | 否 | 否 |
-| Windows SAPI5 | 系统自带语音 | 否 | 否 |
-| 火山引擎 | 云端 TTS API，17 个音色 | 需要 | 是 |
+| Edge TTS | 微软免费，24线程并发，8 个中文音色 | 需要 | 否 |
+| Piper TTS | 本地离线 AI | 否 | 否 |
+| Windows SAPI5 | 系统自带 | 否 | 否 |
+| 火山引擎 | 云端 TTS API | 需要 | 是 |
 
-## 性能特点
+## ⚡ 性能
 
-- **自适应并发**：根据 CPU 核心数自动调整管线数（8-48 条）
-- **流水线并行**：GIF 渲染、TTS 合成、MP4 编码同时进行
-- **FFmpeg ultrafast 预设**：编码速度提升 5-10 倍
+| 特性 | 说明 |
+|------|------|
+| 自适应编码器 | NVENC → AMF → QSV → Media Foundation → CPU x264 |
+| 自适应并发 | GPU 4-8 workers，CPU 8-24 workers |
+| TTS 预生成 | Edge TTS 24 线程并发，3 次失败重试 |
+| 分段复用 | head(3s) GPU 编码 + tail GPU 编码缓存复用 |
+| 单视频耗时 | ~0.5 秒（102 视频约 50 秒） |
 
-## FFmpeg 准备
+## 🖥️ 系统信息展示
 
-1. 将 `ffmpeg.exe` 和 `ffprobe.exe` 放入 `tools/ffmpeg/` 目录
-2. 或系统已安装 FFmpeg 并加入 PATH 环境变量
+批量生成页面自动检测并显示：
+- 电脑配置：CPU 型号、GPU 型号、内存大小
+- 生成方案：编码器排名 ①②③④ + 并发数 + 语音引擎
 
-## 输出结构
-
-```
-output/
-└── 生成的视频/
-    ├── 温州市.mp4
-    ├── 杭州市.mp4
-    ├── AA视频生成报告.txt
-    └── ...
-```
-
-## 打包 EXE
-
-```bash
-pip install pyinstaller
-python build_exe.py
-```
-
-输出 `dist/矩量拓客-地区视频批量生成.exe`
-
-## 项目结构
+## 📁 项目结构
 
 ```
 region_batch_video_tool/
-├── main.py                     # 入口
-├── requirements.txt            # 依赖
-├── build_exe.py                # 打包脚本
-├── assets/                     # 图标 + 50 套花字模板
-├── config/                     # 配置文件
-├── core/                       # 核心业务 (GIF渲染/TTS/视频合成/批量管线)
-├── ui/                         # PySide6 界面
-├── models/                     # 数据模型
-├── utils/                      # 工具函数
-├── tests/                      # 单元测试
-├── cache/                      # 临时缓存
-└── output/生成的视频/           # 最终输出
+├── main.py              # 入口
+├── build_exe.py         # 打包脚本
+├── version_info.txt     # EXE 版本信息
+├── assets/
+│   ├── fonts/           # 5 个内置中文字体
+│   ├── templates/       # 100 个花字模板 JSON
+│   └── icon.ico
+├── config/              # 运行配置
+├── core/                # 核心引擎
+│   ├── batch_task_manager.py   # 异步流水线
+│   ├── video_composer.py       # FFmpeg 视频合成
+│   ├── text_render_service.py  # PIL 文字渲染
+│   ├── gif_render_service.py   # GIF 叠加
+│   ├── font_manager.py         # 字体管理(系统+内置)
+│   ├── font_style_analyzer.py  # 花字颜色提取
+│   └── ffmpeg_service.py       # FFmpeg 编码器检测
+├── ui/                  # PySide6 界面
+├── models/              # 数据模型
+└── tools/ffmpeg/        # FFmpeg 可执行文件
 ```
+
+## 📊 生成报告示例
+
+```
+生成时间: 2026-05-16 12:56:38
+总计: 102  成功: 102  失败: 0
+========================================
+
+【电脑配置】
+  CPU: 12th Gen i5-12400F (12 核)
+  GPU: Intel Arc A380 Graphics
+  内存: 32 GB
+
+【生成方案】
+  编码器: Intel QSV GPU  ③ 较快
+  并发数: 8 线程
+  视频分段: head(3.0s)+tail 复用
+  总耗时: 51 秒  |  平均: 0.5 秒/个
+```
+
+## 📝 License
+
+MIT
