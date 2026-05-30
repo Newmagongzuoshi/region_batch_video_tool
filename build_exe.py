@@ -24,9 +24,19 @@ def build():
             shutil.rmtree(path)
 
     desktop = os.path.join(os.path.expanduser("~"), "Desktop")
-    exe_name = "矩量拓客-地区视频批量生成"
 
-    version_file = os.path.join(app_dir, "version_info.txt")
+    # Read version from version_info.txt
+    ver = "1.6.5"
+    vf = os.path.join(app_dir, "version_info.txt")
+    if os.path.isfile(vf):
+        import re
+        with open(vf, "r", encoding="utf-8") as f:
+            m = re.search(r'filevers=\((\d+),\s*(\d+),\s*(\d+),\s*(\d+)\)', f.read())
+            if m:
+                ver = f"{m.group(1)}.{m.group(2)}.{m.group(3)}"
+    exe_name = f"矩量拓客-地区视频批量生成-v{ver}"
+
+    version_file = vf
 
     opts = [
         os.path.join(app_dir, "main.py"),
